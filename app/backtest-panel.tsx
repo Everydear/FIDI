@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type RateSource = {
   source: string;
@@ -25,6 +25,14 @@ type BacktestMetrics = {
 };
 
 type CurvePoint = { date: string; value: number; drawdown: number };
+
+type ReadinessCheck = {
+  id: string;
+  label: string;
+  status: "PASS" | "FAIL" | "PENDING";
+  blocker: boolean;
+  detail: string;
+};
 
 type BacktestSuccess = {
   status: "verified";
@@ -53,6 +61,7 @@ type BacktestSuccess = {
   };
   assumptions: {
     rebalance: "weekly" | "monthly" | "quarterly";
+    lockedRebalance: "weekly" | "monthly" | "quarterly";
     transactionCostBps: number;
     riskFreeRatePercent: number;
     adjustedClose: boolean;
@@ -83,6 +92,14 @@ type BacktestSuccess = {
   benchmark: {
     ticker: string;
     name: string;
+    definition: string;
+    metrics: BacktestMetrics;
+    curve: CurvePoint[];
+  };
+  marketReference: {
+    ticker: string;
+    name: string;
+    role: string;
     metrics: BacktestMetrics;
     curve: CurvePoint[];
   };
@@ -90,6 +107,40 @@ type BacktestSuccess = {
     beatBenchmark: boolean;
     excessTotalReturn: number;
     excessCagr: number;
+  };
+  readiness: {
+    verdict: "HOLD" | "READY";
+    readyForLiveCapital: boolean;
+    checkedAt: string;
+    summary: {
+      passed: number;
+      failed: number;
+      pending: number;
+      total: number;
+      blockers: number;
+    };
+    statistics: {
+      informationRatio: number | null;
+      rollingBeatRate: number | null;
+      worstRollingExcess: number | null;
+      costStressExcessCagr: number;
+      delayedStartExcessCagr: number;
+      alternateCadenceExcessCagr: number;
+      maximumDrawdownGap: number;
+      concentration: {
+        maximumWeight: number;
+        herfindahlIndex: number;
+      };
+    };
+    evidence: {
+      researchUnitTests: number;
+      v3CombinedRows: number;
+      v3ReferenceObservations: number;
+      retrospectiveOutOfSample: boolean;
+      forwardObservationStart: string;
+      earliestFormalReview: string;
+    };
+    checks: ReadinessCheck[];
   };
 };
 
@@ -145,10 +196,6 @@ export function BacktestPanel({
   profileName: string;
 }) {
   const [state, setState] = useState<BacktestState>({ kind: "idle" });
-
-  useEffect(() => {
-    setState({ kind: "idle" });
-  }, [profileCode]);
 
   const chartLines = useMemo(
     () => {
@@ -211,7 +258,8 @@ export function BacktestPanel({
           <h2>공식 데이터로 전체 포트폴리오 검증</h2>
           <p>
             Massive·KRX·FRED·ECOS 자료로 배당·분할·환율·비용을 반영하고,
-            현재 {profileName} 전체 구성을 TIGER 미국S&amp;P500과 비교합니다.
+            현재 {profileName} 전체 구성을 동일위험 정책 기준선과 비교한 뒤
+            실운용 준비요건까지 판정합니다.
           </p>
         </div>
         <button
@@ -240,7 +288,7 @@ export function BacktestPanel({
             <i>01</i> Massive 미국 종가·배당
             <i>02</i> KRX 최근 종가 대조
             <i>03</i> FRED 환율·비용
-            <i>04</i> 벤치마크 비교
+            <i>04</i> 실운용 게이트 판정
           </div>
         </div>
       )}
@@ -277,6 +325,123 @@ export function BacktestPanel({
               <b>{state.data.period.observations.toLocaleString("ko-KR")} 거래 관측치</b>
             </p>
           </div>
+
+          <section
+            className={`readiness-card ${
+              state.data.readiness.readyForLiveCapital ? "ready" : "hold"
+            }`}
+            aria-label="실운용 준비도 판정"
+          >
+            <div className="readiness-hero">
+              <div>
+                <span>PRE-LIVE VALIDATION · {state.data.readiness.verdict}</span>
+                <strong>
+                  {state.data.readiness.readyForLiveCapital
+                    ? "실제자금 운용 준비 완료"
+                    : "실제자금 투입 보류"}
+                </strong>
+                <p>
+                  {state.data.readiness.readyForLiveCapital
+                    ? "잠금된 필수 검증 게이트를 모두 통과했습니다."
+                    : `${state.data.readiness.summary.blockers}개 필수 게이트가 남았습니다. 과거 수익률만으로 운용을 시작하면 안 됩니다.`}
+                </p>
+              </div>
+              <dl>
+                <div>
+                  <dt>통과</dt>
+                  <dd>{state.data.readiness.summary.passed}</dd>
+                </div>
+                <div>
+                  <dt>실패</dt>
+                  <dd>{state.data.readiness.summary.failed}</dd>
+                </div>
+                <div>
+                  <dt>대기</dt>
+                  <dd>{state.data.readiness.summary.pending}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="readiness-stat-grid">
+              <article>
+                <span>정보비율</span>
+                <strong>
+                  {state.data.readiness.statistics.informationRatio === null
+                    ? "—"
+                    : number.format(
+                        state.data.readiness.statistics.informationRatio,
+                      )}
+                </strong>
+                <small>동일위험 기준선 대비</small>
+              </article>
+              <article>
+                <span>6개월 구간 승률</span>
+                <strong>
+                  {state.data.readiness.statistics.rollingBeatRate === null
+                    ? "—"
+                    : percent.format(
+                        state.data.readiness.statistics.rollingBeatRate,
+                      )}
+                </strong>
+                <small>126거래일 롤링</small>
+              </article>
+              <article>
+                <span>비용 3배 초과 CAGR</span>
+                <strong>
+                  {percent.format(
+                    state.data.readiness.statistics.costStressExcessCagr,
+                  )}
+                </strong>
+                <small>{state.data.assumptions.transactionCostBps * 3}bp 스트레스</small>
+              </article>
+              <article>
+                <span>21일 지연 초과 CAGR</span>
+                <strong>
+                  {percent.format(
+                    state.data.readiness.statistics.delayedStartExcessCagr,
+                  )}
+                </strong>
+                <small>시작일 민감도</small>
+              </article>
+              <article>
+                <span>낙폭 차이</span>
+                <strong>
+                  {percent.format(
+                    state.data.readiness.statistics.maximumDrawdownGap,
+                  )}
+                </strong>
+                <small>양수면 기준선보다 방어적</small>
+              </article>
+            </div>
+
+            <div className="readiness-checks">
+              {state.data.readiness.checks.map((check) => (
+                <article key={check.id} className={check.status.toLowerCase()}>
+                  <span>{check.status}</span>
+                  <div>
+                    <strong>{check.label}</strong>
+                    <p>{check.detail}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="research-evidence">
+              <strong>연구 파이프라인 증거</strong>
+              <p>
+                단위테스트 {state.data.readiness.evidence.researchUnitTests}개 통과 ·
+                V3 결합 데이터{" "}
+                {state.data.readiness.evidence.v3CombinedRows.toLocaleString("ko-KR")}행 ·
+                기준 백테스트{" "}
+                {state.data.readiness.evidence.v3ReferenceObservations.toLocaleString("ko-KR")}관측치
+              </p>
+              <span>
+                단, 회고 결과이며 OOS 아님 · 전진 관찰{" "}
+                {state.data.readiness.evidence.forwardObservationStart} 시작 · 최초 정식
+                검토 {state.data.readiness.evidence.earliestFormalReview}
+              </span>
+            </div>
+          </section>
 
           <div className="backtest-metrics">
             <article className="primary">
@@ -321,7 +486,7 @@ export function BacktestPanel({
             }`}
           >
             <div>
-              <span>전체 포트폴리오 vs 단일 벤치마크</span>
+              <span>전체 포트폴리오 vs 동일위험 정책 기준선</span>
               <strong>
                 {state.data.comparison.beatBenchmark
                   ? "벤치마크 상회"
@@ -337,7 +502,7 @@ export function BacktestPanel({
                 <dd>{percent.format(state.data.metrics.cagr)}</dd>
               </div>
               <div>
-                <dt>벤치마크 CAGR</dt>
+                <dt>정책 기준선 CAGR</dt>
                 <dd>{percent.format(state.data.benchmark.metrics.cagr)}</dd>
               </div>
               <div>
@@ -354,17 +519,17 @@ export function BacktestPanel({
           <div className="backtest-detail-grid">
             <article className="equity-curve-card">
               <div>
-                <span>KRW EQUITY CURVE</span>
-                <strong>전체 포트폴리오와 벤치마크</strong>
+                <span>KRW TOTAL RETURN CURVE</span>
+                <strong>전체 포트폴리오와 동일위험 기준선</strong>
               </div>
               <div className="curve-legend" aria-hidden="true">
                 <span><i />{profileName} 포트폴리오</span>
-                <span><i />TIGER 미국S&amp;P500</span>
+                <span><i />동일위험 정책 기준선</span>
               </div>
               <svg
                 viewBox="0 0 800 220"
                 role="img"
-                aria-label={`${profileName} 포트폴리오와 TIGER 미국S&P500 누적 운용가치 비교`}
+                aria-label={`${profileName} 포트폴리오와 동일위험 정책 기준선 누적 운용가치 비교`}
               >
                 <line x1="20" y1="200" x2="780" y2="200" />
                 <line x1="20" y1="120" x2="780" y2="120" />
@@ -419,6 +584,10 @@ export function BacktestPanel({
                   <dd>{state.data.assumptions.transactionCostBps}bp / 회전금액</dd>
                 </div>
                 <div>
+                  <dt>잠금 정책 주기</dt>
+                  <dd>{cadenceLabel[state.data.assumptions.lockedRebalance]}</dd>
+                </div>
+                <div>
                   <dt>무위험금리</dt>
                   <dd>{number.format(state.data.assumptions.riskFreeRatePercent)}%</dd>
                 </div>
@@ -427,6 +596,11 @@ export function BacktestPanel({
                   <dd>{percent.format(state.data.metrics.annualizedTurnover)}</dd>
                 </div>
               </dl>
+              <p className="market-reference">
+                시장 참고치: {state.data.marketReference.name}({state.data.marketReference.ticker})
+                CAGR {percent.format(state.data.marketReference.metrics.cagr)} · 공식 채택
+                벤치마크 아님
+              </p>
               <div className="api-connections">
                 <span className="connected">Massive 연결됨</span>
                 <span className="connected">KRX 대조됨</span>

@@ -4,7 +4,12 @@ import { runBacktest } from "@/lib/backtest/engine.mjs";
 import {
   getBacktestAssets,
   getBacktestCadence,
+  getLockedCadence,
+  getLockedProfileWeights,
+  getProfileWeights,
   isBacktestProfileCode,
+  type RebalanceCadence,
+  type Sleeve,
 } from "@/lib/backtest/portfolio";
 import {
   convertUsdSeriesToKrw,
@@ -14,10 +19,22 @@ import {
   fetchFredUsdKrwSeries,
   fetchKrxOfficialAudit,
   fetchMassiveDividendEvents,
+  type PricePoint,
+  type PriceProvider,
 } from "@/lib/backtest/providers";
+import { buildLiveReadiness } from "@/lib/backtest/validation.mjs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
+
+type PricedAsset = {
+  id: string;
+  name: string;
+  sleeve: Sleeve;
+  weight: number;
+  prices: PricePoint[];
+  provider: PriceProvider;
+};
 
 function isIsoDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -37,6 +54,67 @@ function freeHistoryStart(end: string) {
   date.setUTCFullYear(date.getUTCFullYear() - 2);
   date.setUTCDate(date.getUTCDate() + 7);
   return date.toISOString().slice(0, 10);
+}
+
+function createPolicyBenchmarkAssets(pricedAssets: PricedAsset[]) {
+  const market = pricedAssets.find((asset) => asset.sleeve === "market");
+  if (!market) {
+    throw new Error("동일위험 정책 기준선에 필요한 시장 ETF 가격이 없습니다.");
+  }
+
+  const equityWeight = pricedAssets
+    .filter((asset) =>
+      ["market", "strategy", "stocks"].includes(asset.sleeve),
+    )
+    .reduce((sum, asset) => sum + asset.weight, 0);
+  const benchmarkAssets = [
+    {
+      id: "POLICY-EQUITY-360750",
+      name: "주식 위험예산 · TIGER 미국S&P500",
+      weight: equityWeight,
+      prices: market.prices,
+    },
+  ];
+
+  for (const sleeve of [
+    "government",
+    "credit",
+    "alternative",
+    "cash",
+  ] as const) {
+    const asset = pricedAssets.find((candidate) => candidate.sleeve === sleeve);
+    if (asset && asset.weight > 0) {
+      benchmarkAssets.push({
+        id: `POLICY-${asset.id}`,
+        name: asset.name,
+        weight: asset.weight,
+        prices: asset.prices,
+      });
+    }
+  }
+  return benchmarkAssets;
+}
+
+function pricesFrom(
+  assets: PricedAsset[],
+  startDate: string,
+): PricedAsset[] {
+  return assets.map((asset) => ({
+    ...asset,
+    prices: asset.prices.filter((point) => point.date >= startDate),
+  }));
+}
+
+function alternateCadence(cadence: RebalanceCadence): RebalanceCadence {
+  if (cadence === "quarterly") return "monthly";
+  if (cadence === "monthly") return "quarterly";
+  return "monthly";
+}
+
+function publicResult<T extends { fullCurve: unknown }>(result: T) {
+  const { fullCurve: _fullCurve, ...value } = result;
+  void _fullCurve;
+  return value;
 }
 
 export async function GET(request: Request) {
@@ -108,6 +186,7 @@ export async function GET(request: Request) {
         return {
           id: asset.id,
           name: asset.name,
+          sleeve: asset.sleeve,
           weight: asset.weight,
           prices:
             asset.currency === "USD"
@@ -132,25 +211,34 @@ export async function GET(request: Request) {
       (ecosRateResult?.averagePercent ??
         fredRateResult?.averagePercent ??
         0) / 100;
-    const transactionCostBps = profileValue === "CONTEST" ? 25 : 15;
+    const cadence = getBacktestCadence(profileValue);
+    const lockedCadence = getLockedCadence(profileValue);
+    const transactionCostBps = profileValue === "CONTEST" ? 30 : 20;
     const result = runBacktest({
       assets: pricedAssets,
-      cadence: getBacktestCadence(profileValue),
+      cadence,
       transactionCostBps,
       annualRiskFreeRate,
     });
 
-    const benchmarkAsset = pricedAssets.find((asset) => asset.id === "360750");
-    if (!benchmarkAsset) {
-      throw new Error("벤치마크 TIGER 미국S&P500(360750) 가격이 없습니다.");
-    }
+    const policyBenchmarkAssets = createPolicyBenchmarkAssets(pricedAssets);
     const benchmark = runBacktest({
+      assets: policyBenchmarkAssets,
+      cadence,
+      transactionCostBps,
+      annualRiskFreeRate,
+    });
+    const marketAsset = pricedAssets.find((asset) => asset.id === "360750");
+    if (!marketAsset) {
+      throw new Error("시장 참고지수 TIGER 미국S&P500(360750) 가격이 없습니다.");
+    }
+    const marketReference = runBacktest({
       assets: [
         {
-          id: benchmarkAsset.id,
-          name: benchmarkAsset.name,
+          id: marketAsset.id,
+          name: marketAsset.name,
           weight: 1,
-          prices: benchmarkAsset.prices.filter(
+          prices: marketAsset.prices.filter(
             (point) =>
               point.date >= result.period.start && point.date <= result.period.end,
           ),
@@ -160,14 +248,80 @@ export async function GET(request: Request) {
       transactionCostBps: 0,
       annualRiskFreeRate,
     });
+
+    const costStress = runBacktest({
+      assets: pricedAssets,
+      cadence,
+      transactionCostBps: transactionCostBps * 3,
+      annualRiskFreeRate,
+    });
+    const costStressPolicyBenchmark = runBacktest({
+      assets: policyBenchmarkAssets,
+      cadence,
+      transactionCostBps: transactionCostBps * 3,
+      annualRiskFreeRate,
+    });
+    const delayedStartDate =
+      result.fullCurve[Math.min(21, result.fullCurve.length - 2)].date;
+    const delayedAssets = pricesFrom(pricedAssets, delayedStartDate);
+    const delayedResult = runBacktest({
+      assets: delayedAssets,
+      cadence,
+      transactionCostBps,
+      annualRiskFreeRate,
+    });
+    const delayedPolicyBenchmark = runBacktest({
+      assets: createPolicyBenchmarkAssets(delayedAssets),
+      cadence,
+      transactionCostBps,
+      annualRiskFreeRate,
+    });
+    const sensitivityCadence = alternateCadence(cadence);
+    const cadenceSensitivity = runBacktest({
+      assets: pricedAssets,
+      cadence: sensitivityCadence,
+      transactionCostBps,
+      annualRiskFreeRate,
+    });
+    const cadencePolicyBenchmark = runBacktest({
+      assets: policyBenchmarkAssets,
+      cadence: sensitivityCadence,
+      transactionCostBps,
+      annualRiskFreeRate,
+    });
+    const readiness = buildLiveReadiness({
+      profile: profileValue,
+      result,
+      policyBenchmark: benchmark,
+      costStress: {
+        result: costStress,
+        policyBenchmark: costStressPolicyBenchmark,
+      },
+      delayedStart: {
+        result: delayedResult,
+        policyBenchmark: delayedPolicyBenchmark,
+      },
+      alternateCadence: {
+        cadence: sensitivityCadence,
+        result: cadenceSensitivity,
+        policyBenchmark: cadencePolicyBenchmark,
+      },
+      currentWeights: getProfileWeights(profileValue),
+      lockedWeights: getLockedProfileWeights(profileValue),
+      currentCadence: cadence,
+      lockedCadence,
+      krxAudit,
+      assetWeights: pricedAssets.map((asset) => asset.weight),
+    });
     const providers = [
       ...new Set(pricedAssets.map((asset) => asset.provider)),
     ];
     const warnings = [
-      "전체 포트폴리오의 원화 환산 순자산가치만 TIGER 미국S&P500(360750)과 같은 기간으로 비교합니다. 개별 종목이 각각 벤치마크를 이길 필요는 없습니다.",
+      "공식 채택 판단은 같은 주식·채권·금·현금 위험예산을 가진 정책 기준선과 비교합니다. TIGER 미국S&P500(360750) 100% 보유는 시장 참고치일 뿐 채택 벤치마크가 아닙니다.",
       "현재 화면의 고정 편입 종목을 과거에도 보유했다고 가정한 검증입니다. 과거 시점의 종목 선정 규칙 자체를 검증한 결과는 아닙니다.",
       "미국 가격은 Massive SIP 종가와 배당·분할 자료로 총수익률을 재구성했습니다. 국내 전체 이력은 수정주가를 사용하고 최근 종가는 KRX Open API와 교차 대조했습니다.",
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
+      "성과가 기준선을 상회하더라도 point-in-time 후보군, 사전 잠금 후 전진 OOS, 실제 체결 드라이런이 끝나기 전에는 실자금 투입 판정을 내리지 않습니다.",
     ];
     if (requestedStart < minimumStart) {
       warnings.push(
@@ -207,17 +361,25 @@ export async function GET(request: Request) {
         adjustedClose: true,
         dividendsAndSplits: "미국은 Massive 이벤트로 재투자, 한국은 수정주가에 반영",
         fx: "FRED DEXKOUS 일별 원/달러 환율로 원화 환산",
-        rebalance: getBacktestCadence(profileValue),
+        rebalance: cadence,
+        lockedRebalance: lockedCadence,
         transactionCostBps,
         initialPurchaseCost: "포트폴리오와 벤치마크 모두 제외",
         riskFreeRatePercent: annualRiskFreeRate * 100,
         missingMarketDays: "전일 가격 유지",
       },
       benchmark: {
+        ticker: "POLICY",
+        name: "동일위험 정책 기준선",
+        definition:
+          "현재 주식 위험예산은 TIGER 미국S&P500으로, 채권·금·현금 위험예산은 동일 상품과 동일 비중으로 구성",
+        ...publicResult(benchmark),
+      },
+      marketReference: {
         ticker: "360750",
         name: "TIGER 미국S&P500",
-        metrics: benchmark.metrics,
-        curve: benchmark.curve,
+        role: "시장 참고치 · 공식 채택 벤치마크 아님",
+        ...publicResult(marketReference),
       },
       comparison: {
         beatBenchmark:
@@ -235,8 +397,9 @@ export async function GET(request: Request) {
         lastPriceDate: prices.at(-1)?.date,
         observations: prices.length,
       })),
+      readiness,
       warnings,
-      ...result,
+      ...publicResult(result),
     });
   } catch (error) {
     const message =

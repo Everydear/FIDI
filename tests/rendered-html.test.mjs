@@ -55,7 +55,8 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /실데이터 백테스트 실행/);
   assert.match(html, /공식 데이터로 전체 포트폴리오 검증/);
   assert.match(html, /Massive 미국 종가·배당/);
-  assert.match(html, /벤치마크 비교/);
+  assert.match(html, /실운용 게이트 판정/);
+  assert.match(html, /동일위험 정책 기준선/);
   assert.match(html, /정기 교체 검토/);
   assert.match(html, /FUNETF/);
   assert.match(html, /네이버 금융/);

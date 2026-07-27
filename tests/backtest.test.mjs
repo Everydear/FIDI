@@ -25,6 +25,7 @@ test("compounds adjusted prices without look-ahead", () => {
   assert.equal(result.metrics.maximumDrawdown, 0);
   assert.equal(result.metrics.rebalances, 0);
   assert.equal(result.period.observations, 3);
+  assert.equal(result.fullCurve.length, 3);
 });
 
 test("forward-fills non-overlapping market holidays after common inception", () => {
@@ -109,4 +110,3 @@ test("charges transaction costs only on scheduled rebalance turnover", () => {
   assert.ok(withCost.metrics.endingValue < noCost.metrics.endingValue);
   assert.ok(withCost.metrics.cumulativeCost > 0);
 });
-

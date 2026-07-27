@@ -12,10 +12,20 @@ export type BacktestAsset = {
   currency: "KRW" | "USD";
   market: "KRX" | "US";
   krxDataset?: "stock" | "etf";
+  sleeve: Sleeve;
   weight: number;
 };
 
-type SleeveWeights = {
+export type Sleeve =
+  | "market"
+  | "strategy"
+  | "stocks"
+  | "government"
+  | "credit"
+  | "alternative"
+  | "cash";
+
+export type SleeveWeights = {
   market: number;
   strategy: number;
   stocks: number;
@@ -24,6 +34,8 @@ type SleeveWeights = {
   alternative: number;
   cash: number;
 };
+
+export type RebalanceCadence = "weekly" | "monthly" | "quarterly";
 
 const PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
   CONSERVATIVE: {
@@ -73,6 +85,54 @@ const PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
   },
 };
 
+const LOCKED_PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
+  CONSERVATIVE: {
+    market: 15,
+    strategy: 3,
+    stocks: 2,
+    government: 45.5,
+    credit: 19.5,
+    alternative: 5,
+    cash: 10,
+  },
+  MODERATE_CONSERVATIVE: {
+    market: 25,
+    strategy: 7,
+    stocks: 3,
+    government: 38.5,
+    credit: 16.5,
+    alternative: 5,
+    cash: 5,
+  },
+  MODERATE: {
+    market: 35,
+    strategy: 10,
+    stocks: 5,
+    government: 28,
+    credit: 12,
+    alternative: 7,
+    cash: 3,
+  },
+  GROWTH: {
+    market: 50,
+    strategy: 15,
+    stocks: 5,
+    government: 14,
+    credit: 6,
+    alternative: 7,
+    cash: 3,
+  },
+  CONTEST: {
+    market: 10,
+    strategy: 30,
+    stocks: 50,
+    government: 0,
+    credit: 0,
+    alternative: 0,
+    cash: 10,
+  },
+};
+
 const ASSETS = {
   market: {
     id: "360750",
@@ -81,6 +141,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "market" as const,
   },
   strategy: {
     id: "133690",
@@ -89,6 +150,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "strategy" as const,
   },
   contestStrategy: {
     id: "381170",
@@ -97,6 +159,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "strategy" as const,
   },
   stocks: [
     {
@@ -105,6 +168,7 @@ const ASSETS = {
       yahooSymbol: "NVDA",
       currency: "USD" as const,
       market: "US" as const,
+      sleeve: "stocks" as const,
     },
     {
       id: "JNJ",
@@ -112,6 +176,7 @@ const ASSETS = {
       yahooSymbol: "JNJ",
       currency: "USD" as const,
       market: "US" as const,
+      sleeve: "stocks" as const,
     },
     {
       id: "WMT",
@@ -119,6 +184,7 @@ const ASSETS = {
       yahooSymbol: "WMT",
       currency: "USD" as const,
       market: "US" as const,
+      sleeve: "stocks" as const,
     },
     {
       id: "005380",
@@ -127,6 +193,7 @@ const ASSETS = {
       currency: "KRW" as const,
       market: "KRX" as const,
       krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
     },
     {
       id: "105560",
@@ -135,6 +202,7 @@ const ASSETS = {
       currency: "KRW" as const,
       market: "KRX" as const,
       krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
     },
   ],
   government: {
@@ -144,6 +212,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "government" as const,
   },
   credit: {
     id: "273130",
@@ -152,6 +221,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "credit" as const,
   },
   alternative: {
     id: "132030",
@@ -160,6 +230,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "alternative" as const,
   },
   cash: {
     id: "488770",
@@ -168,6 +239,7 @@ const ASSETS = {
     currency: "KRW" as const,
     market: "KRX" as const,
     krxDataset: "etf" as const,
+    sleeve: "cash" as const,
   },
 };
 
@@ -186,10 +258,28 @@ export function isBacktestProfileCode(
 
 export function getBacktestCadence(
   profile: BacktestProfileCode,
-): "weekly" | "monthly" | "quarterly" {
+): RebalanceCadence {
   if (profile === "CONTEST") return "weekly";
   if (profile === "GROWTH") return "monthly";
   return "quarterly";
+}
+
+export function getLockedCadence(
+  profile: BacktestProfileCode,
+): RebalanceCadence {
+  return profile === "CONTEST" ? "weekly" : "quarterly";
+}
+
+export function getProfileWeights(
+  profile: BacktestProfileCode,
+): SleeveWeights {
+  return { ...PROFILE_WEIGHTS[profile] };
+}
+
+export function getLockedProfileWeights(
+  profile: BacktestProfileCode,
+): SleeveWeights {
+  return { ...LOCKED_PROFILE_WEIGHTS[profile] };
 }
 
 export function getBacktestAssets(

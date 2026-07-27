@@ -488,23 +488,26 @@ export default function Home() {
   const holdingsAsOf = useLatestKoreaDate();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sharedProfile = params.get("profile");
-    const sharedAmount = Number(params.get("amount"));
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const sharedProfile = params.get("profile");
+      const sharedAmount = Number(params.get("amount"));
 
-    if (
-      sharedProfile &&
-      profiles.some((candidate) => candidate.code === sharedProfile)
-    ) {
-      setProfileCode(sharedProfile as ProfileCode);
-    }
-    if (
-      Number.isFinite(sharedAmount) &&
-      sharedAmount >= 10_000_000 &&
-      sharedAmount <= 500_000_000
-    ) {
-      setAmount(sharedAmount);
-    }
+      if (
+        sharedProfile &&
+        profiles.some((candidate) => candidate.code === sharedProfile)
+      ) {
+        setProfileCode(sharedProfile as ProfileCode);
+      }
+      if (
+        Number.isFinite(sharedAmount) &&
+        sharedAmount >= 10_000_000 &&
+        sharedAmount <= 500_000_000
+      ) {
+        setAmount(sharedAmount);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const profile = profiles.find(
@@ -1022,6 +1025,7 @@ export default function Home() {
       </section>
 
       <BacktestPanel
+        key={profile.code}
         profileCode={profile.code}
         profileName={profile.name}
       />
