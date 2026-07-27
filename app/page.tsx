@@ -40,6 +40,23 @@ type Profile = {
   allocations: Allocation[];
 };
 
+type SurveyQuestionId = "goal" | "horizon" | "loss" | "experience";
+
+type SurveyOption = {
+  id: string;
+  label: string;
+  score: number;
+};
+
+type SurveyQuestion = {
+  id: SurveyQuestionId;
+  label: string;
+  help: string;
+  options: SurveyOption[];
+};
+
+type SurveyAnswers = Partial<Record<SurveyQuestionId, string>>;
+
 type Holding = {
   ticker: string;
   name: string;
@@ -94,6 +111,56 @@ const buildAllocations = (
     percent: values[id],
     color: COLORS[id],
   }));
+
+const surveyQuestions: SurveyQuestion[] = [
+  {
+    id: "goal",
+    label: "가장 중요한 투자 목표는 무엇인가요?",
+    help: "수익보다 안정성을 먼저 볼지, 성장 기회를 더 크게 볼지 선택하세요.",
+    options: [
+      { id: "protect", label: "원금 변동을 최대한 줄이고 싶어요", score: 1 },
+      { id: "income", label: "안정성을 우선하면서 수익도 원해요", score: 2 },
+      { id: "balance", label: "안정성과 성장을 균형 있게 원해요", score: 3 },
+      { id: "growth", label: "장기 성장을 위해 변동성을 감수할 수 있어요", score: 4 },
+      { id: "contest", label: "투자대회에서 높은 순위를 노리고 싶어요", score: 5 },
+    ],
+  },
+  {
+    id: "horizon",
+    label: "투자금을 언제 사용할 예정인가요?",
+    help: "돈을 꺼내 쓸 시점이 늦을수록 성장자산을 담을 여지가 커집니다.",
+    options: [
+      { id: "short", label: "1년 안에 사용할 수 있어요", score: 1 },
+      { id: "medium", label: "1~3년 뒤에 사용할 예정이에요", score: 2 },
+      { id: "long", label: "3~5년 이상 여유가 있어요", score: 3 },
+      { id: "very-long", label: "5년 이상 투자할 수 있어요", score: 4 },
+    ],
+  },
+  {
+    id: "loss",
+    label: "일시적인 손실을 어느 정도까지 감당할 수 있나요?",
+    help: "중간에 가격이 내려가도 계속 유지할 수 있는 범위를 골라주세요.",
+    options: [
+      { id: "tiny", label: "-5%만 내려가도 불안해요", score: 1 },
+      { id: "small", label: "-10% 정도까지는 괜찮아요", score: 2 },
+      { id: "medium", label: "-20%까지는 기다릴 수 있어요", score: 3 },
+      { id: "large", label: "-30%까지도 감수할 수 있어요", score: 4 },
+      { id: "very-large", label: "큰 폭의 하락도 감수하고 수익을 노려요", score: 5 },
+    ],
+  },
+  {
+    id: "experience",
+    label: "투자 경험은 어느 정도인가요?",
+    help: "경험이 많을수록 가격 변동과 교체 안내를 직접 확인하기 쉽습니다.",
+    options: [
+      { id: "new", label: "투자를 처음 시작해요", score: 1 },
+      { id: "some", label: "예·적금과 ETF를 조금 경험했어요", score: 2 },
+      { id: "regular", label: "주식과 ETF를 꾸준히 운용해요", score: 3 },
+      { id: "advanced", label: "시장 흐름과 위험을 직접 관리해요", score: 4 },
+      { id: "competition", label: "투자대회나 적극적인 매매 경험이 있어요", score: 5 },
+    ],
+  },
+];
 
 const profiles: Profile[] = [
   {
@@ -187,6 +254,23 @@ const profiles: Profile[] = [
     }),
   },
 ];
+
+function recommendProfile(answers: SurveyAnswers): ProfileCode {
+  if (answers.goal === "contest") return "CONTEST";
+
+  const scores = surveyQuestions
+    .map((question) => {
+      const answer = answers[question.id];
+      return question.options.find((option) => option.id === answer)?.score;
+    })
+    .filter((score): score is number => typeof score === "number");
+  const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+
+  if (average <= 1.5) return "CONSERVATIVE";
+  if (average <= 2.4) return "MODERATE_CONSERVATIVE";
+  if (average <= 3.4) return "MODERATE";
+  return "GROWTH";
+}
 
 const stockLeaders = [
   {
@@ -520,6 +604,9 @@ function createDonut(allocations: Allocation[]) {
 export default function Home() {
   const [profileCode, setProfileCode] =
     useState<ProfileCode>("MODERATE");
+  const [surveyAnswers, setSurveyAnswers] = useState<SurveyAnswers>({});
+  const [surveyResult, setSurveyResult] = useState<ProfileCode | null>(null);
+  const [showAlternateProfiles, setShowAlternateProfiles] = useState(false);
   const [amount, setAmount] = useState(100_000_000);
   const [holdingFilter, setHoldingFilter] =
     useState<HoldingFilter>("전체");
@@ -539,6 +626,7 @@ export default function Home() {
         profiles.some((candidate) => candidate.code === sharedProfile)
       ) {
         setProfileCode(sharedProfile as ProfileCode);
+        setShowAlternateProfiles(true);
       }
       if (
         Number.isFinite(sharedAmount) &&
@@ -587,6 +675,26 @@ export default function Home() {
   const donutStyle = {
     "--donut": createDonut(profile.allocations),
   } as CSSProperties;
+
+  const surveyComplete = surveyQuestions.every(
+    (question) => Boolean(surveyAnswers[question.id]),
+  );
+  const recommendedProfile = surveyResult
+    ? profiles.find((candidate) => candidate.code === surveyResult)
+    : null;
+
+  function selectProfile(code: ProfileCode) {
+    setProfileCode(code);
+    setHoldingFilter("전체");
+    setQuery("");
+  }
+
+  function completeSurvey() {
+    if (!surveyComplete) return;
+    const recommendation = recommendProfile(surveyAnswers);
+    setSurveyResult(recommendation);
+    selectProfile(recommendation);
+  }
 
   async function sharePortfolio() {
     const shareUrl = new URL(window.location.href);
@@ -709,47 +817,140 @@ export default function Home() {
         <div className="section-heading">
           <div>
             <span className="step-label">STEP 01</span>
-            <h2>어떤 방식으로 운용할까요?</h2>
+            <h2>먼저 내 투자 유형을 찾아보세요.</h2>
           </div>
           <p>
-            유형을 바꾸면 자산 비중과 종목별 투자금이 즉시 다시
-            계산됩니다.
+            네 가지 질문에 답하면 투자 성향에 맞는 유형을 추천합니다.
+            추천 결과를 적용한 뒤 다른 유형의 구성도 비교할 수 있습니다.
           </p>
         </div>
 
-        <div className="profile-grid" role="list">
-          {profiles.map((candidate) => {
-            const active = candidate.code === profileCode;
-            return (
-              <button
-                className={`profile-card ${active ? "active" : ""}`}
-                key={candidate.code}
-                onClick={() => {
-                  setProfileCode(candidate.code);
-                  setHoldingFilter("전체");
-                  setQuery("");
-                }}
-                aria-pressed={active}
-                type="button"
-              >
-                <span className="profile-card-top">
-                  <span className="risk-bars" aria-label={`위험도 ${candidate.riskLevel}`}>
-                    {[1, 2, 3, 4, 5].map((level) => (
-                      <i
-                        className={level <= candidate.riskLevel ? "filled" : ""}
-                        key={level}
-                      />
-                    ))}
-                  </span>
-                  <small>RISK {candidate.riskLevel}</small>
-                </span>
-                <strong>{candidate.name}</strong>
-                <b>{candidate.shortName}</b>
-                <span>{candidate.description}</span>
-                <em>{active ? "선택됨" : "선택하기"} →</em>
-              </button>
-            );
-          })}
+        <div className="profile-assessment">
+          <div className="assessment-intro">
+            <div>
+              <span className="step-label">FIDI 투자 성향 진단</span>
+              <h3>답변을 바탕으로 맞는 구성을 추천해드려요.</h3>
+            </div>
+            <p>정답은 없습니다. 지금의 목표와 투자할 수 있는 기간을 기준으로 답해 주세요.</p>
+          </div>
+
+          <div className="survey-grid">
+            {surveyQuestions.map((question, index) => (
+              <fieldset className="survey-question" key={question.id}>
+                <legend>
+                  <span>Q{String(index + 1).padStart(2, "0")}</span>
+                  {question.label}
+                </legend>
+                <p>{question.help}</p>
+                <div className="survey-options">
+                  {question.options.map((option) => {
+                    const selected = surveyAnswers[question.id] === option.id;
+                    return (
+                      <label
+                        className={`survey-option ${selected ? "selected" : ""}`}
+                        key={option.id}
+                      >
+                        <input
+                          type="radio"
+                          name={question.id}
+                          value={option.id}
+                          checked={selected}
+                          onChange={() =>
+                            setSurveyAnswers((current) => ({
+                              ...current,
+                              [question.id]: option.id,
+                            }))
+                          }
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+
+          <div className="assessment-actions">
+            <button
+              className="assessment-submit"
+              type="button"
+              onClick={completeSurvey}
+              disabled={!surveyComplete}
+            >
+              내 투자 유형 확인 <span>→</span>
+            </button>
+            <small>
+              {surveyComplete
+                ? "모든 답변을 선택했습니다."
+                : `${surveyQuestions.length}개 질문에 답해 주세요.`}
+            </small>
+          </div>
+
+          {recommendedProfile && (
+            <div className="survey-result" role="status" aria-live="polite">
+              <div>
+                <span>설문 추천 유형</span>
+                <strong>{recommendedProfile.name}</strong>
+                <p>{recommendedProfile.description}</p>
+              </div>
+              <div className="survey-result-actions">
+                <small>
+                  현재 {profile.name} 구성을 보고 있습니다.
+                </small>
+                {profile.code !== recommendedProfile.code && (
+                  <button type="button" onClick={() => selectProfile(recommendedProfile.code)}>
+                    추천 유형으로 돌아가기
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="alternate-profiles-toggle">
+            <button
+              type="button"
+              onClick={() => setShowAlternateProfiles((current) => !current)}
+              aria-expanded={showAlternateProfiles}
+            >
+              {showAlternateProfiles ? "다른 유형 접기" : "다른 투자 유형도 직접 보기"}
+              <span>{showAlternateProfiles ? "↑" : "↓"}</span>
+            </button>
+            <small>설문 추천과 관계없이 원하는 유형의 포트폴리오를 비교할 수 있습니다.</small>
+          </div>
+
+          {showAlternateProfiles && (
+            <div className="profile-grid" role="list" aria-label="다른 투자 유형 선택">
+              {profiles.map((candidate) => {
+                const active = candidate.code === profileCode;
+                return (
+                  <button
+                    className={`profile-card ${active ? "active" : ""}`}
+                    key={candidate.code}
+                    onClick={() => selectProfile(candidate.code)}
+                    aria-pressed={active}
+                    type="button"
+                  >
+                    <span className="profile-card-top">
+                      <span className="risk-bars" aria-label={`위험도 ${candidate.riskLevel}`}>
+                        {[1, 2, 3, 4, 5].map((level) => (
+                          <i
+                            className={level <= candidate.riskLevel ? "filled" : ""}
+                            key={level}
+                          />
+                        ))}
+                      </span>
+                      <small>RISK {candidate.riskLevel}</small>
+                    </span>
+                    <strong>{candidate.name}</strong>
+                    <b>{candidate.shortName}</b>
+                    <span>{candidate.description}</span>
+                    <em>{active ? "현재 보기" : "이 유형 보기"} →</em>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 

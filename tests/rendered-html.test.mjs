@@ -51,6 +51,10 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /투자자 유형/);
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
+  assert.match(html, /FIDI 투자 성향 진단/);
+  assert.match(html, /가장 중요한 투자 목표는 무엇인가요/);
+  assert.match(html, /내 투자 유형 확인/);
+  assert.match(html, /다른 투자 유형도 직접 보기/);
   assert.match(html, /현재 투자 구성/);
   assert.match(html, /클릭 한 번에 설계하세요/);
   assert.doesNotMatch(html, /ETF에만 몰아넣지 않습니다/);
