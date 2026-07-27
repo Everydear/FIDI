@@ -110,3 +110,37 @@ test("charges transaction costs only on scheduled rebalance turnover", () => {
   assert.ok(withCost.metrics.endingValue < noCost.metrics.endingValue);
   assert.ok(withCost.metrics.cumulativeCost > 0);
 });
+
+test("separates slippage and skips tiny scheduled rebalances", () => {
+  const result = runBacktest({
+    assets: [
+      {
+        id: "A",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 101 },
+        ],
+      },
+      {
+        id: "B",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 100 },
+        ],
+      },
+    ],
+    cadence: "monthly",
+    transactionCostBps: 100,
+    slippageBps: 50,
+    rebalanceBand: 0.05,
+    annualRiskFreeRate: 0,
+  });
+
+  assert.equal(result.metrics.rebalances, 0);
+  assert.equal(result.metrics.skippedRebalances, 1);
+  assert.equal(result.metrics.cumulativeSlippageCost, 0);
+  assert.equal(result.metrics.executionCostBps, 150);
+  assert.equal(result.dataQuality.totalMissingObservations, 0);
+});

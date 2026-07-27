@@ -21,6 +21,12 @@ type BacktestMetrics = {
   totalTurnover: number;
   annualizedTurnover: number;
   cumulativeCost: number;
+  cumulativeTransactionCost?: number;
+  cumulativeSlippageCost?: number;
+  cumulativeTaxCost?: number;
+  executionCostBps?: number;
+  rebalanceBand?: number;
+  skippedRebalances?: number;
   rebalances: number;
 };
 
@@ -102,6 +108,10 @@ type BacktestSuccess = {
     lockedRebalance: "weekly" | "monthly" | "quarterly";
     dailyEvaluation: boolean;
     transactionCostBps: number;
+    slippageBps?: number;
+    taxBps?: number;
+    executionCostBps?: number;
+    rebalanceBand?: number;
     riskFreeRatePercent: number;
     adjustedClose: boolean;
     dividendsAndSplits: string;
@@ -154,6 +164,10 @@ type BacktestSuccess = {
     evaluationCadence: "daily";
     switchThreshold: number;
     transactionCostBps: number;
+    slippageBps?: number;
+    taxBps?: number;
+    executionCostBps?: number;
+    rebalanceBand?: number;
     headline: string;
     summary: {
       groups: number;
@@ -184,6 +198,31 @@ type BacktestSuccess = {
       delayedStartExcessCagr: number;
       alternateCadenceExcessCagr: number;
       maximumDrawdownGap: number;
+      walkForward?: {
+        status: string;
+        alignedObservations: number;
+        folds: Array<unknown>;
+        beatRate: number | null;
+        meanExcessCagr: number | null;
+        worstExcessCagr: number | null;
+      };
+      dataQuality?: {
+        commonObservations: number;
+        totalMissingObservations: number;
+        maximumForwardFillObservations: number;
+        minimumCoverageRatio: number;
+      };
+      riskLimits?: {
+        maxSingleAssetWeight: number;
+        maxSingleAssetWeightLimit: number;
+        equityWeight: number;
+        maxEquityWeight: number;
+        maximumDrawdown: number;
+        maxDrawdown: number;
+        annualizedTurnover: number;
+        maxAnnualizedTurnover: number;
+        rebalanceBand: number;
+      };
       concentration: {
         maximumWeight: number;
         herfindahlIndex: number;
@@ -196,6 +235,14 @@ type BacktestSuccess = {
       retrospectiveOutOfSample: boolean;
       forwardObservationStart: string;
       earliestFormalReview: string;
+      walkForward?: {
+        status: string;
+        alignedObservations: number;
+        folds: Array<unknown>;
+        beatRate: number | null;
+        meanExcessCagr: number | null;
+        worstExcessCagr: number | null;
+      };
     };
     checks: GuidanceCheck[];
   };
@@ -460,6 +507,10 @@ export function BacktestPanel({
                   {percent.format(state.data.dailyGuide.switchThreshold)} 이상
                   비교 · 최종 실행은 사용자 직접 결정
                 </p>
+                <small>
+                  실행비용 {state.data.dailyGuide.executionCostBps ?? state.data.dailyGuide.transactionCostBps}bp ·
+                  비중 이탈 {percent.format(state.data.dailyGuide.rebalanceBand ?? 0)}p 이상일 때 검토
+                </small>
               </div>
               <div className="daily-guide-summary">
                 <div>
@@ -631,6 +682,51 @@ export function BacktestPanel({
                 </strong>
                 <small>양수면 기준선보다 방어적</small>
               </article>
+              <article>
+                <span>OOS 검증 구간</span>
+                <strong>
+                  {state.data.guidance.statistics.walkForward?.folds.length ??
+                    0}
+                  회
+                </strong>
+                <small>
+                  {state.data.guidance.statistics.walkForward?.meanExcessCagr ==
+                  null
+                    ? "데이터 부족"
+                    : `평균 ${percent.format(state.data.guidance.statistics.walkForward.meanExcessCagr)}`}
+                </small>
+              </article>
+              <article>
+                <span>가격 데이터 품질</span>
+                <strong>
+                  {percent.format(
+                    state.data.guidance.statistics.dataQuality
+                      ?.minimumCoverageRatio ?? 1,
+                  )}
+                </strong>
+                <small>
+                  공백 보정 {number.format(
+                    state.data.guidance.statistics.dataQuality
+                      ?.totalMissingObservations ?? 0,
+                  )}
+                  개
+                </small>
+              </article>
+              <article>
+                <span>최대 종목 비중</span>
+                <strong>
+                  {percent.format(
+                    state.data.guidance.statistics.riskLimits
+                      ?.maxSingleAssetWeight ?? 0,
+                  )}
+                </strong>
+                <small>
+                  한도 {percent.format(
+                    state.data.guidance.statistics.riskLimits
+                      ?.maxSingleAssetWeightLimit ?? 0,
+                  )}
+                </small>
+              </article>
             </div>
 
             <div className="readiness-checks">
@@ -660,6 +756,14 @@ export function BacktestPanel({
                 {state.data.guidance.evidence.forwardObservationStart} 시작 · 1년
                 기록 확인 {state.data.guidance.evidence.earliestFormalReview}
               </span>
+              {state.data.guidance.evidence.walkForward && (
+                <span>
+                  과거 시계열 홀드아웃 {state.data.guidance.evidence.walkForward.folds.length}개 ·
+                  {state.data.guidance.evidence.walkForward.meanExcessCagr == null
+                    ? " 데이터 부족"
+                    : ` 평균 초과 연수익률 ${percent.format(state.data.guidance.evidence.walkForward.meanExcessCagr)}`}
+                </span>
+              )}
             </div>
           </section>
 
@@ -805,7 +909,18 @@ export function BacktestPanel({
                 </div>
                 <div>
                   <dt>거래비용</dt>
-                  <dd>{state.data.assumptions.transactionCostBps}bp / 회전금액</dd>
+                  <dd>
+                    {state.data.assumptions.transactionCostBps}bp 수수료 +{" "}
+                    {state.data.assumptions.slippageBps ?? 0}bp 슬리피지
+                  </dd>
+                </div>
+                <div>
+                  <dt>총 실행비용</dt>
+                  <dd>{state.data.assumptions.executionCostBps ?? state.data.assumptions.transactionCostBps}bp</dd>
+                </div>
+                <div>
+                  <dt>리밸런싱 밴드</dt>
+                  <dd>{percent.format(state.data.assumptions.rebalanceBand ?? 0)}p</dd>
                 </div>
                 <div>
                   <dt>기준 조정 주기</dt>

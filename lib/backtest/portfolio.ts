@@ -37,6 +37,14 @@ export type SleeveWeights = {
 
 export type RebalanceCadence = "weekly" | "monthly" | "quarterly";
 
+export type RiskRules = {
+  maxSingleAssetWeight: number;
+  maxEquityWeight: number;
+  maxDrawdown: number;
+  rebalanceBand: number;
+  maxAnnualizedTurnover: number;
+};
+
 export type DailyCandidateGroup = {
   id: string;
   name: string;
@@ -100,6 +108,44 @@ const LOCKED_PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
   MODERATE: { ...PROFILE_WEIGHTS.MODERATE },
   GROWTH: { ...PROFILE_WEIGHTS.GROWTH },
   CONTEST: { ...PROFILE_WEIGHTS.CONTEST },
+};
+
+const PROFILE_RISK_RULES: Record<BacktestProfileCode, RiskRules> = {
+  CONSERVATIVE: {
+    maxSingleAssetWeight: 0.45,
+    maxEquityWeight: 0.3,
+    maxDrawdown: 0.25,
+    rebalanceBand: 0.05,
+    maxAnnualizedTurnover: 0.75,
+  },
+  MODERATE_CONSERVATIVE: {
+    maxSingleAssetWeight: 0.4,
+    maxEquityWeight: 0.5,
+    maxDrawdown: 0.3,
+    rebalanceBand: 0.05,
+    maxAnnualizedTurnover: 1,
+  },
+  MODERATE: {
+    maxSingleAssetWeight: 0.35,
+    maxEquityWeight: 0.7,
+    maxDrawdown: 0.35,
+    rebalanceBand: 0.05,
+    maxAnnualizedTurnover: 1.5,
+  },
+  GROWTH: {
+    maxSingleAssetWeight: 0.35,
+    maxEquityWeight: 0.9,
+    maxDrawdown: 0.45,
+    rebalanceBand: 0.03,
+    maxAnnualizedTurnover: 2.5,
+  },
+  CONTEST: {
+    maxSingleAssetWeight: 0.5,
+    maxEquityWeight: 0.95,
+    maxDrawdown: 0.6,
+    rebalanceBand: 0.02,
+    maxAnnualizedTurnover: 6,
+  },
 };
 
 const ASSETS = {
@@ -305,6 +351,10 @@ export function getLockedProfileWeights(
   profile: BacktestProfileCode,
 ): SleeveWeights {
   return { ...LOCKED_PROFILE_WEIGHTS[profile] };
+}
+
+export function getRiskRules(profile: BacktestProfileCode): RiskRules {
+  return { ...PROFILE_RISK_RULES[profile] };
 }
 
 export function getBacktestAssets(

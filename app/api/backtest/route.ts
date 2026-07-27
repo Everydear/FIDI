@@ -8,6 +8,7 @@ import {
   getLockedCadence,
   getLockedProfileWeights,
   getProfileWeights,
+  getRiskRules,
   isBacktestProfileCode,
   type BacktestAsset,
   type RebalanceCadence,
@@ -25,7 +26,10 @@ import {
   type PriceProvider,
 } from "@/lib/backtest/providers";
 import { buildDailyGuide } from "@/lib/backtest/daily-guide.mjs";
-import { buildValidationGuide } from "@/lib/backtest/validation.mjs";
+import {
+  buildValidationGuide,
+  calculateWalkForwardStatistics,
+} from "@/lib/backtest/validation.mjs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
@@ -57,6 +61,12 @@ function freeHistoryStart(end: string) {
   date.setUTCFullYear(date.getUTCFullYear() - 2);
   date.setUTCDate(date.getUTCDate() + 7);
   return date.toISOString().slice(0, 10);
+}
+
+function addOneYear(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCFullYear(value.getUTCFullYear() + 1);
+  return value.toISOString().slice(0, 10);
 }
 
 function createPolicyBenchmarkAssets(pricedAssets: PricedAsset[]) {
@@ -243,10 +253,17 @@ export async function GET(request: Request) {
         0) / 100;
     const cadence = getBacktestCadence(profileValue);
     const lockedCadence = getLockedCadence(profileValue);
+    const riskRules = getRiskRules(profileValue);
     const transactionCostBps = profileValue === "CONTEST" ? 30 : 20;
+    const slippageBps = profileValue === "CONTEST" ? 10 : 5;
+    const taxBps = 0;
+    const executionCostBps = transactionCostBps + slippageBps + taxBps;
     const dailyGuide = buildDailyGuide({
       profile: profileValue,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       groups: candidateGroups.map((group) => ({
         id: group.id,
         name: group.name,
@@ -268,6 +285,9 @@ export async function GET(request: Request) {
       assets: pricedAssets,
       cadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
 
@@ -276,6 +296,9 @@ export async function GET(request: Request) {
       assets: policyBenchmarkAssets,
       cadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const marketAsset = pricedAssets.find((asset) => asset.id === "360750");
@@ -296,6 +319,9 @@ export async function GET(request: Request) {
       ],
       cadence: "quarterly",
       transactionCostBps: 0,
+      slippageBps: 0,
+      taxBps: 0,
+      rebalanceBand: 0,
       annualRiskFreeRate,
     });
 
@@ -303,12 +329,18 @@ export async function GET(request: Request) {
       assets: pricedAssets,
       cadence,
       transactionCostBps: transactionCostBps * 3,
+      slippageBps: slippageBps * 3,
+      taxBps: taxBps * 3,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const costStressPolicyBenchmark = runBacktest({
       assets: policyBenchmarkAssets,
       cadence,
       transactionCostBps: transactionCostBps * 3,
+      slippageBps: slippageBps * 3,
+      taxBps: taxBps * 3,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const delayedStartDate =
@@ -318,12 +350,18 @@ export async function GET(request: Request) {
       assets: delayedAssets,
       cadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const delayedPolicyBenchmark = runBacktest({
       assets: createPolicyBenchmarkAssets(delayedAssets),
       cadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const sensitivityCadence = alternateCadence(cadence);
@@ -331,14 +369,41 @@ export async function GET(request: Request) {
       assets: pricedAssets,
       cadence: sensitivityCadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
     const cadencePolicyBenchmark = runBacktest({
       assets: policyBenchmarkAssets,
       cadence: sensitivityCadence,
       transactionCostBps,
+      slippageBps,
+      taxBps,
+      rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
+    const walkForward = calculateWalkForwardStatistics(
+      result.fullCurve,
+      benchmark.fullCurve,
+    );
+    const equityWeight = pricedAssets
+      .filter((asset) => ["market", "strategy", "stocks"].includes(asset.sleeve))
+      .reduce((sum, asset) => sum + asset.weight, 0);
+    const riskLimits = {
+      maxSingleAssetWeight: Math.max(
+        ...pricedAssets.map((asset) => asset.weight),
+        0,
+      ),
+      maxSingleAssetWeightLimit: riskRules.maxSingleAssetWeight,
+      equityWeight,
+      maxEquityWeight: riskRules.maxEquityWeight,
+      maximumDrawdown: Math.abs(result.metrics.maximumDrawdown),
+      maxDrawdown: riskRules.maxDrawdown,
+      annualizedTurnover: result.metrics.annualizedTurnover,
+      maxAnnualizedTurnover: riskRules.maxAnnualizedTurnover,
+      rebalanceBand: riskRules.rebalanceBand,
+    };
     const guidance = buildValidationGuide({
       profile: profileValue,
       result,
@@ -362,6 +427,11 @@ export async function GET(request: Request) {
       lockedCadence,
       krxAudit,
       assetWeights: pricedAssets.map((asset) => asset.weight),
+      walkForward,
+      dataQuality: result.dataQuality,
+      riskLimits,
+      forwardObservationStart: end,
+      earliestFormalReview: addOneYear(end),
     });
     const providers = [
       ...new Set(pricedUniverse.map((asset) => asset.provider)),
@@ -372,6 +442,8 @@ export async function GET(request: Request) {
       "미국 가격은 Massive SIP 종가와 배당·분할 자료로 총수익률을 재구성했습니다. 국내 전체 이력은 수정주가를 사용하고 최근 종가는 KRX Open API와 교차 대조했습니다.",
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
+      `백테스트에는 거래수수료 ${transactionCostBps}bp + 예상 슬리피지 ${slippageBps}bp를 합친 실행비용 ${executionCostBps}bp를 반영했습니다. 실제 체결비용은 시장·주문규모에 따라 달라질 수 있습니다.`,
+      `리밸런싱은 ${riskRules.rebalanceBand * 100}%p 이상 목표 비중에서 벗어났을 때만 검토하도록 설정했습니다.`,
     ];
     if (requestedStart < minimumStart) {
       warnings.push(
@@ -417,6 +489,10 @@ export async function GET(request: Request) {
         lockedRebalance: lockedCadence,
         dailyEvaluation: true,
         transactionCostBps,
+        slippageBps,
+        taxBps,
+        executionCostBps,
+        rebalanceBand: riskRules.rebalanceBand,
         initialPurchaseCost: "포트폴리오와 벤치마크 모두 제외",
         riskFreeRatePercent: annualRiskFreeRate * 100,
         missingMarketDays: "전일 가격 유지",

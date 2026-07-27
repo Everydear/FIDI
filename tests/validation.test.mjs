@@ -5,6 +5,7 @@ import {
   buildValidationGuide,
   calculateConcentration,
   calculateRelativeStatistics,
+  calculateWalkForwardStatistics,
 } from "../lib/backtest/validation.mjs";
 
 function curve(values) {
@@ -35,6 +36,28 @@ test("reports maximum holding and Herfindahl concentration", () => {
   const concentration = calculateConcentration([0.5, 0.3, 0.2]);
   assert.equal(concentration.maximumWeight, 0.5);
   assert.ok(Math.abs(concentration.herfindahlIndex - 0.38) < 1e-12);
+});
+
+test("scores a temporal holdout without looking into the test window", () => {
+  const start = Date.UTC(2020, 0, 1);
+  const portfolio = Array.from({ length: 900 }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    value: 100 * 1.001 ** index,
+  }));
+  const benchmark = Array.from({ length: 900 }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    value: 100 * 1.0005 ** index,
+  }));
+
+  const result = calculateWalkForwardStatistics(portfolio, benchmark, {
+    minimumTrainObservations: 252,
+    testWindow: 126,
+  });
+
+  assert.equal(result.status, "CHECKED");
+  assert.ok(result.folds.length >= 2);
+  assert.equal(result.folds[0].trainObservations, 252);
+  assert.ok(result.meanExcessCagr > 0);
 });
 
 test("turns validation evidence into a neutral operating guide", () => {
