@@ -55,6 +55,13 @@ jobs:
       - name: Build and test
         run: pnpm test
 
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config dist/server/wrangler.json
+
       - name: Update runtime secrets
         shell: bash
         run: |
@@ -62,10 +69,3 @@ jobs:
           printf '%s' "$FRED_KEY" | pnpm exec wrangler secret put FRED_KEY --config dist/server/wrangler.json
           printf '%s' "$MASSIVE_API_KEY" | pnpm exec wrangler secret put MASSIVE_API_KEY --config dist/server/wrangler.json
           printf '%s' "$KRX_AUTH_KEY" | pnpm exec wrangler secret put KRX_AUTH_KEY --config dist/server/wrangler.json
-
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config dist/server/wrangler.json
