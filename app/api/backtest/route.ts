@@ -17,6 +17,7 @@ import {
 } from "@/lib/backtest/providers";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 180;
 
 function isIsoDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));

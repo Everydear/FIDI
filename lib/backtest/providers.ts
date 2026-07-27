@@ -319,8 +319,13 @@ async function fetchKrxMarketDay(
   let response: Response;
   try {
     response = await fetch(endpoint, {
-      headers: { AUTH_KEY: apiKey },
-      signal: AbortSignal.timeout(12_000),
+      headers: {
+        AUTH_KEY: apiKey,
+        Accept: "application/json",
+        "User-Agent":
+          "FIDI-Portfolio/4.0 (+https://fidi-portfolio-v4-2026.gwg03045.chatgpt.site)",
+      },
+      signal: AbortSignal.timeout(75_000),
     });
   } catch (error) {
     throw new Error(
