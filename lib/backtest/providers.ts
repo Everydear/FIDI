@@ -1,4 +1,5 @@
 import type { BacktestAsset } from "./portfolio";
+import { parseKrxClosingPrices } from "./krx.mjs";
 
 export type PricePoint = { date: string; value: number };
 export type PriceProvider =
@@ -340,6 +341,7 @@ async function fetchKrxMarketDay(
     respMsg?: string;
     OutBlock_1?: Array<{
       BAS_DD?: string;
+      ISU_CD?: string;
       ISU_SRT_CD?: string;
       TDD_CLSPRC?: string | number;
     }>;
@@ -357,14 +359,7 @@ async function fetchKrxMarketDay(
     );
   }
 
-  const prices = new Map<string, number>();
-  for (const row of payload.OutBlock_1 ?? []) {
-    const value = safeNumber(row.TDD_CLSPRC);
-    if (row.ISU_SRT_CD && value && value > 0) {
-      prices.set(row.ISU_SRT_CD, value);
-    }
-  }
-  return prices;
+  return parseKrxClosingPrices(payload.OutBlock_1 ?? []);
 }
 
 export async function fetchKrxOfficialAudit(
