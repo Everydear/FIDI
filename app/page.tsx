@@ -490,7 +490,7 @@ function buildHoldings(profile: Profile): Holding[] {
     holdings.push({
       ticker: "488770",
       name: "KODEX 머니마켓액티브",
-      role: "유동성과 리밸런싱 대기자금",
+      role: "유동성과 비중 조정 대기자금",
       percent: weight.cash,
       kind: "현금",
       sector: "현금성",
@@ -615,10 +615,10 @@ export default function Home() {
         </a>
         <nav aria-label="주요 메뉴">
           <a href="#profile">투자자 유형</a>
-          <a href="#portfolio">자산배분</a>
+          <a href="#portfolio">자산 배분</a>
           <a href="#holdings">편입종목</a>
-          <a href="#backtest">오늘 운용가이드</a>
-          <a href="#rules">운용규칙</a>
+          <a href="#backtest">오늘 확인</a>
+          <a href="#rules">선정 기준</a>
         </nav>
         <span className="status-pill">
           <i />
@@ -654,7 +654,7 @@ export default function Home() {
         <aside className="hero-panel" aria-label="서비스 요약">
           <div className="hero-panel-top">
             <span>PORTFOLIO ENGINE</span>
-            <strong>자산배분은 안정적으로,<br />종목선정은 유연하게.</strong>
+            <strong>자산 비중은 안정적으로,<br />종목은 유연하게 고릅니다.</strong>
           </div>
           <div className="mini-allocation" aria-hidden="true">
             <i style={{ width: "40%" }} />
@@ -757,7 +757,7 @@ export default function Home() {
       <section className="portfolio-section" id="portfolio">
         <div className="portfolio-titlebar">
           <div>
-            <span className="step-label">STEP 02 · ASSET MIX</span>
+            <span className="step-label">STEP 02 · 자산 배분</span>
             <h2>{profile.name} 포트폴리오</h2>
             <p>{profile.description}</p>
           </div>
@@ -813,7 +813,7 @@ export default function Home() {
             <div className="card-title">
               <div>
                 <span>ASSET ALLOCATION</span>
-                <h3>목표 자산배분</h3>
+                <h3>목표 비중</h3>
               </div>
               <small>합계 100%</small>
             </div>
@@ -821,7 +821,7 @@ export default function Home() {
               <div
                 className="donut"
                 style={donutStyle}
-                aria-label={`${profile.name} 자산배분 도넛 차트`}
+                aria-label={`${profile.name} 자산 비중 차트`}
               >
                 <div>
                   <small>성장자산</small>
@@ -849,7 +849,7 @@ export default function Home() {
                 <span>KRW TARGET</span>
                 <h3>자산별 투자금액</h3>
               </div>
-              <small>{profile.cadence} 리밸런싱</small>
+              <small>{profile.cadence} 비중 조정</small>
             </div>
             <div className="allocation-table">
               {profile.allocations
@@ -894,14 +894,14 @@ export default function Home() {
               <p>대체자산은 별도 분산 비중</p>
             </article>
             <article className="metric-card">
-              <span>성과 검증</span>
-              <strong>실데이터</strong>
-              <p>아래 운용가이드에서 직접 계산</p>
+              <span>성과 확인</span>
+              <strong>실제 가격</strong>
+              <p>아래에서 직접 확인</p>
             </article>
             <article className="metric-card accent">
-              <span>검증 전 숫자</span>
-              <strong>사용 안 함</strong>
-              <p>다음 점검 {profile.nextReview}</p>
+              <span>다음 확인</span>
+              <strong>{profile.nextReview}</strong>
+              <p>가격·구성 다시 확인</p>
             </article>
           </aside>
         </div>
@@ -911,12 +911,11 @@ export default function Home() {
         <div className="section-heading">
           <div>
             <span className="step-label">STEP 03 · HOLDINGS</span>
-            <h2>현재 모델 편입안</h2>
+            <h2>현재 투자 구성</h2>
           </div>
           <p>
-            실제 거래 가능한 공식 상품명과 티커를 표시합니다. 현재
-            버전은 규칙 기반 모델안이며 최신 가격은 페이지 진입 시
-            자동 조회합니다. 주문 기능은 제공하지 않습니다.
+            실제로 거래할 수 있는 상품명과 코드를 보여줍니다. 최신 가격은
+            페이지를 열 때 확인하며, 이 화면은 매수·매도 주문을 대신하지 않습니다.
           </p>
         </div>
 
@@ -927,9 +926,9 @@ export default function Home() {
             <small>한국시간 자동 갱신</small>
           </div>
           <div>
-            <span>라인업 검증일</span>
+            <span>상품 확인일</span>
             <strong>{lineupVerifiedAsOf}</strong>
-            <small>상품명·티커 확인</small>
+            <small>상품명·코드 확인</small>
           </div>
           <div className="quote-status">
             <span>최신 시세</span>
@@ -987,7 +986,7 @@ export default function Home() {
         <div className="holdings-meta">
           <span>
             <i />
-            최신 편입 기준일 {holdingsAsOf}
+            구성 기준일 {holdingsAsOf}
           </span>
           <strong>{filteredHoldings.length}개 상품 표시</strong>
         </div>
@@ -1038,8 +1037,8 @@ export default function Home() {
                     <small>{holding.vehicle}</small>
                     <b className={holding.dynamic ? "dynamic" : ""}>
                       {holding.dynamic
-                        ? "정기 교체 검토"
-                        : "모델 기준 편입"}
+                        ? "교체 검토"
+                        : "기본 구성"}
                     </b>
                   </div>
                   <div className="holding-code">
@@ -1068,10 +1067,9 @@ export default function Home() {
         </div>
         <p className="data-note">
           화면 조회일은 한국시간 {holdingsAsOf}로 자동 갱신되지만,
-          상품 라인업은 {lineupVerifiedAsOf}에 공식 명칭과 티커를
-          확인한 규칙 기반 모델안입니다. 채권·현금성·대체자산 슬리브는
-          증권계좌에서 거래 가능한 ETF로 구현했습니다. 가격, 거래 가능
-          여부, 세금과 수수료는 주문 직전에 다시 확인해야 합니다.
+          상품 목록은 {lineupVerifiedAsOf}에 상품명과 코드를 확인했습니다.
+          채권·현금성·대체자산은 증권계좌에서 거래할 수 있는 ETF로 구성했습니다.
+          가격, 거래 가능 여부, 세금과 수수료는 실제 거래 전에 다시 확인하세요.
         </p>
       </section>
 
@@ -1083,21 +1081,20 @@ export default function Home() {
 
       <section className="rules-section" id="rules">
         <div className="rules-intro">
-          <span className="step-label">DYNAMIC SELECTION RULE</span>
+          <span className="step-label">종목을 고르는 기준</span>
           <h2>
             비중은 정책으로,
             <br />
-            <em>종목은 데이터로.</em>
+            <em>종목은 데이터로 고릅니다.</em>
           </h2>
           <p>
-            한 번 고른 ETF와 주식을 영구 보유하는 구조가 아닙니다.
-            매일 같은 기준으로 후보를 다시 평가하고, 점수 우위와
-            거래비용을 함께 본 뒤 교체 여부를 안내합니다.
+            ETF와 주식을 한 번 정해두고 계속 보유하지 않습니다. 매일 같은
+            기준으로 후보를 비교하고, 비용과 위험을 함께 살펴 교체 여부를 안내합니다.
           </p>
           <div className="model-phase" aria-label="운용 진행 상태">
             <div>
               <span>현재 V4.1</span>
-              <strong>매일 후보 점수 · 교체 비교 · 주문 가이드</strong>
+              <strong>매일 가격 확인 · 교체 비교 안내</strong>
             </div>
           </div>
           <div className="source-list">
@@ -1132,45 +1129,44 @@ export default function Home() {
           <article>
             <span>01</span>
             <div>
-              <small>UNIVERSE</small>
-              <h3>후보군 만들기</h3>
+              <small>01 · 후보 찾기</small>
+              <h3>거래 가능한 상품 찾기</h3>
               <p>
-                거래 가능 ETF와 국내·미국 섹터 대표주를 모으고,
-                거래대금과 운용기간이 부족한 종목은 제외합니다.
+                거래할 수 있는 ETF와 국내·미국 대표 종목을 모으고,
+                자료가 부족한 상품은 따로 표시합니다.
               </p>
             </div>
           </article>
           <article>
             <span>02</span>
             <div>
-              <small>SCORE</small>
-              <h3>같은 기준으로 점수화</h3>
+              <small>02 · 가격 비교</small>
+              <h3>같은 기준으로 비교하기</h3>
               <p>
-                중기 모멘텀, 변동성, 거래대금, 비용, 섹터 중복도를
-                합산해 자산군 안에서 순위를 계산합니다.
+                최근 가격 흐름, 흔들림, 거래량, 비용을 함께 보고
+                같은 자산군 안에서 순서를 정합니다.
               </p>
             </div>
           </article>
           <article>
             <span>03</span>
             <div>
-              <small>CONTROL</small>
-              <h3>교체 비용과 위험 제한</h3>
+              <small>03 · 위험 확인</small>
+              <h3>비용과 위험 확인하기</h3>
               <p>
-                기존 종목보다 충분히 높은 점수일 때만 교체하고, 단일
-                종목·섹터·환율 노출 상한을 함께 적용합니다.
+                기존 상품보다 차이가 충분할 때만 교체하고, 한 종목이나
+                한 섹터에 돈이 몰리지 않도록 제한합니다.
               </p>
             </div>
           </article>
           <article>
             <span>04</span>
             <div>
-              <small>REBALANCE</small>
-              <h3>유형별 주기로 실행</h3>
+              <small>04 · 확인 주기</small>
+              <h3>투자 유형별로 확인하기</h3>
               <p>
-                모든 유형을 매일 평가하고, 일반형은 분기·성장형은
-                월간·대회형은 주간 실행 주기와 교체 우위 기준을 함께
-                사용합니다.
+                모든 유형을 매일 살펴보고, 안정형은 분기·성장형은 월간·
+                대회형은 주간처럼 확인 주기를 다르게 적용합니다.
               </p>
             </div>
           </article>

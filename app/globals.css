@@ -2747,12 +2747,7 @@ input:focus-visible {
   }
 
   .data-status-panel {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .data-status-panel > div:nth-child(3) {
-    border-left: 0;
-    border-top: 1px solid #e2e0f6;
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .amount-toolbar {

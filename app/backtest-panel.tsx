@@ -365,7 +365,7 @@ export function BacktestPanel({
         kind: "error",
         data: {
           status: "network_error",
-          message: "운용 가이드 API에 연결하지 못했습니다.",
+          message: "오늘 구성 확인에 연결하지 못했습니다.",
           setup: "잠시 후 다시 실행해 주세요.",
         },
       });
@@ -376,12 +376,11 @@ export function BacktestPanel({
     <section className="backtest-section" id="backtest">
       <div className="backtest-heading">
         <div>
-          <span className="step-label">STEP 04 · DAILY GUIDE</span>
-          <h2>오늘 데이터로 운용 가이드 만들기</h2>
+          <span className="step-label">STEP 04 · 오늘 확인</span>
+          <h2>오늘 가격으로 구성 확인</h2>
           <p>
-            매일 최신 가격으로 ETF와 섹터별 후보를 다시 점수화합니다.
-            현재 {profileName} 구성을 유지할지, 교체 후보를 비교할지와
-            실행 전 확인 순서를 함께 보여줍니다.
+            매일 최신 가격으로 ETF와 섹터별 후보를 비교합니다. 현재
+            {profileName} 구성을 유지할지, 바꿀 후보가 있는지와 확인 순서를 보여줍니다.
           </p>
         </div>
         <button
@@ -393,24 +392,24 @@ export function BacktestPanel({
           {state.kind === "loading"
             ? "데이터 수집·계산 중…"
             : state.kind === "success"
-              ? "오늘 데이터로 다시 계산"
-              : "오늘 운용 가이드 계산"}
+              ? "오늘 가격으로 다시 확인"
+              : "오늘 구성 확인"}
         </button>
       </div>
 
       {state.kind === "idle" && (
         <div className="backtest-empty">
-          <span>DAILY SIGNAL</span>
-          <strong>오늘의 후보 순위를 확인해 보세요.</strong>
+          <span>오늘 확인</span>
+          <strong>현재 구성과 대안 상품을 비교해 보세요.</strong>
           <p>
-            버튼을 누르면 가격·환율·금리를 새로 확인하고, 현재 편입과
-            대안 후보의 20일·60일 흐름과 변동성을 비교합니다.
+            버튼을 누르면 가격·환율·금리를 새로 확인하고, 현재 상품과
+            대안 후보의 최근 흐름과 흔들림을 비교합니다.
           </p>
           <div>
             <i>01</i> Massive 미국 종가·배당
             <i>02</i> KRX 후보 종가 대조
-            <i>03</i> 매일 후보 점수 계산
-            <i>04</i> 교체·비용·승인 가이드
+            <i>03</i> 매일 후보 비교
+            <i>04</i> 교체·비용 확인 순서
           </div>
         </div>
       )}
@@ -418,14 +417,14 @@ export function BacktestPanel({
       {state.kind === "loading" && (
         <div className="backtest-loading" role="status">
           <i />
-          <strong>오늘의 후보 순위와 운용 가이드를 계산합니다.</strong>
+          <strong>오늘 가격과 비교 결과를 확인합니다.</strong>
           <span>Massive 무료 호출 한도 때문에 첫 실행은 조금 걸릴 수 있습니다.</span>
         </div>
       )}
 
       {state.kind === "error" && (
         <div className="backtest-error" role="alert">
-          <span>운용 가이드를 계산하지 못했습니다</span>
+          <span>오늘 구성 확인을 끝내지 못했습니다</span>
           <strong>{state.data.message}</strong>
           {state.data.setup && <p>{state.data.setup}</p>}
           <button type="button" onClick={executeBacktest}>
@@ -439,8 +438,8 @@ export function BacktestPanel({
           <div className="verification-bar">
             <div>
               <i />
-              <span>OFFICIAL SOURCES CHECKED</span>
-              <strong>KRX 최근 종가 대조 완료</strong>
+              <span>공식 데이터 확인</span>
+              <strong>KRX 최신 종가 확인</strong>
             </div>
             <p>
               {state.data.period.start} — {state.data.period.end}
@@ -448,11 +447,11 @@ export function BacktestPanel({
             </p>
           </div>
 
-          <section className="daily-guide-card" aria-label="오늘 운용 가이드">
+          <section className="daily-guide-card" aria-label="오늘 구성 확인">
             <div className="daily-guide-hero">
               <div>
                 <span>
-                  DAILY SIGNAL · {state.data.dailyGuide.asOf} ·{" "}
+                  오늘 확인 · {state.data.dailyGuide.asOf} ·{" "}
                   {state.data.dailyGuide.version}
                 </span>
                 <strong>{state.data.dailyGuide.headline}</strong>
@@ -536,7 +535,7 @@ export function BacktestPanel({
 
             <div className="execution-guide">
               <div>
-                <span>ORDER CHECKLIST</span>
+                <span>확인 순서</span>
                 <strong>교체 신호가 나온 날의 확인 순서</strong>
               </div>
               <ol>
@@ -553,7 +552,7 @@ export function BacktestPanel({
           >
             <div className="readiness-hero">
               <div>
-                <span>PORTFOLIO REVIEW GUIDE</span>
+                <span>검증 요약</span>
                 <strong>{state.data.guidance.headline}</strong>
                 <p>
                   데이터가 짧은 항목은 한계로 표시하고, 미래 관찰과
@@ -584,7 +583,7 @@ export function BacktestPanel({
 
             <div className="readiness-stat-grid">
               <article>
-                <span>정보비율</span>
+                <span>기준 대비 안정성</span>
                 <strong>
                   {state.data.guidance.statistics.informationRatio === null
                     ? "—"
@@ -592,10 +591,10 @@ export function BacktestPanel({
                         state.data.guidance.statistics.informationRatio,
                       )}
                 </strong>
-                <small>동일위험 기준선 대비</small>
+                <small>기준 구성 대비</small>
               </article>
               <article>
-                <span>6개월 구간 승률</span>
+                <span>최근 6개월 상회 비율</span>
                 <strong>
                   {state.data.guidance.statistics.rollingBeatRate === null
                     ? "—"
@@ -603,25 +602,25 @@ export function BacktestPanel({
                         state.data.guidance.statistics.rollingBeatRate,
                       )}
                 </strong>
-                <small>126거래일 롤링</small>
+                <small>126거래일 기준</small>
               </article>
               <article>
-                <span>비용 3배 초과 CAGR</span>
+                <span>비용을 높였을 때 차이</span>
                 <strong>
                   {percent.format(
                     state.data.guidance.statistics.costStressExcessCagr,
                   )}
                 </strong>
-                <small>{state.data.assumptions.transactionCostBps * 3}bp 스트레스</small>
+                <small>거래비용 {state.data.assumptions.transactionCostBps * 3}bp 가정</small>
               </article>
               <article>
-                <span>21일 지연 초과 CAGR</span>
+                <span>시작일을 바꿨을 때 차이</span>
                 <strong>
                   {percent.format(
                     state.data.guidance.statistics.delayedStartExcessCagr,
                   )}
                 </strong>
-                <small>시작일 민감도</small>
+                <small>21거래일 뒤 시작</small>
               </article>
               <article>
                 <span>낙폭 차이</span>
@@ -668,7 +667,7 @@ export function BacktestPanel({
             <article className="primary">
               <span>연환산 수익률</span>
               <strong>{percent.format(state.data.metrics.cagr)}</strong>
-              <small>복리 CAGR</small>
+              <small>연수익률(복리)</small>
             </article>
             <article>
               <span>누적 수익률</span>
@@ -678,12 +677,12 @@ export function BacktestPanel({
             <article>
               <span>최대 낙폭</span>
               <strong>{percent.format(state.data.metrics.maximumDrawdown)}</strong>
-              <small>고점 대비 MDD</small>
+              <small>고점에서 내려간 폭</small>
             </article>
             <article>
               <span>연 변동성</span>
               <strong>{percent.format(state.data.metrics.annualVolatility)}</strong>
-              <small>일별 수익률 × √252</small>
+              <small>일별 가격 변동 기준</small>
             </article>
             <article>
               <span>샤프지수</span>
@@ -692,12 +691,12 @@ export function BacktestPanel({
                   ? "—"
                   : number.format(state.data.metrics.sharpe)}
               </strong>
-              <small>ECOS 원화 무위험금리 우선</small>
+              <small>ECOS 원화 참고 금리 사용</small>
             </article>
             <article>
               <span>월간 승률</span>
               <strong>{percent.format(state.data.metrics.winningMonths)}</strong>
-              <small>{state.data.metrics.rebalances}회 리밸런싱</small>
+              <small>{state.data.metrics.rebalances}회 비중 조정</small>
             </article>
           </div>
 
@@ -707,11 +706,11 @@ export function BacktestPanel({
             }`}
           >
             <div>
-              <span>전체 포트폴리오 vs 동일위험 정책 기준선</span>
+              <span>포트폴리오와 기준 구성 비교</span>
               <strong>
                 {state.data.comparison.beatBenchmark
-                  ? "벤치마크 상회"
-                  : "벤치마크 하회"}
+                  ? "비교 기준 상회"
+                  : "비교 기준 하회"}
               </strong>
               <small>
                 {state.data.benchmark.name} · {state.data.benchmark.ticker}
@@ -719,15 +718,15 @@ export function BacktestPanel({
             </div>
             <dl>
               <div>
-                <dt>포트폴리오 CAGR</dt>
+                <dt>포트폴리오 연수익률</dt>
                 <dd>{percent.format(state.data.metrics.cagr)}</dd>
               </div>
               <div>
-                <dt>정책 기준선 CAGR</dt>
+                <dt>기준 구성 연수익률</dt>
                 <dd>{percent.format(state.data.benchmark.metrics.cagr)}</dd>
               </div>
               <div>
-                <dt>초과 CAGR</dt>
+                <dt>연수익률 차이</dt>
                 <dd>{percent.format(state.data.comparison.excessCagr)}</dd>
               </div>
               <div>
@@ -740,17 +739,17 @@ export function BacktestPanel({
           <div className="backtest-detail-grid">
             <article className="equity-curve-card">
               <div>
-                <span>KRW TOTAL RETURN CURVE</span>
-                <strong>전체 포트폴리오와 동일위험 기준선</strong>
+                <span>누적 운용가치</span>
+                <strong>포트폴리오와 기준 구성</strong>
               </div>
               <div className="curve-legend" aria-hidden="true">
                 <span><i />{profileName} 포트폴리오</span>
-                <span><i />동일위험 정책 기준선</span>
+                <span><i />기준 구성</span>
               </div>
               <svg
                 viewBox="0 0 800 220"
                 role="img"
-                aria-label={`${profileName} 포트폴리오와 동일위험 정책 기준선 누적 운용가치 비교`}
+                aria-label={`${profileName} 포트폴리오와 기준 구성의 누적 운용가치 비교`}
               >
                 <line x1="20" y1="200" x2="780" y2="200" />
                 <line x1="20" y1="120" x2="780" y2="120" />
@@ -782,7 +781,7 @@ export function BacktestPanel({
                   <dd>Massive + KRX 대조</dd>
                 </div>
                 <div>
-                  <dt>KRX 대조일</dt>
+                  <dt>KRX 확인일</dt>
                   <dd>
                     {state.data.providers.koreanOfficialAudit.date} ·{" "}
                     {state.data.providers.koreanOfficialAudit.matched}종목
@@ -801,7 +800,7 @@ export function BacktestPanel({
                   <dd>{state.data.baseCurrency}</dd>
                 </div>
                 <div>
-                  <dt>리밸런싱</dt>
+                  <dt>비중 조정</dt>
                   <dd>{cadenceLabel[state.data.assumptions.rebalance]}</dd>
                 </div>
                 <div>
@@ -809,26 +808,26 @@ export function BacktestPanel({
                   <dd>{state.data.assumptions.transactionCostBps}bp / 회전금액</dd>
                 </div>
                 <div>
-                  <dt>기준 실행 주기</dt>
+                  <dt>기준 조정 주기</dt>
                   <dd>{cadenceLabel[state.data.assumptions.lockedRebalance]}</dd>
                 </div>
                 <div>
-                  <dt>무위험금리</dt>
+                  <dt>참고 금리</dt>
                   <dd>{number.format(state.data.assumptions.riskFreeRatePercent)}%</dd>
                 </div>
                 <div>
-                  <dt>연간 회전율</dt>
+                  <dt>연간 교체 비율</dt>
                   <dd>{percent.format(state.data.metrics.annualizedTurnover)}</dd>
                 </div>
               </dl>
               <p className="market-reference">
                 시장 참고치: {state.data.marketReference.name}({state.data.marketReference.ticker})
-                CAGR {percent.format(state.data.marketReference.metrics.cagr)} · 공식 채택
-                벤치마크 아님
+                연수익률 {percent.format(state.data.marketReference.metrics.cagr)} · 공식
+                기준 구성 아님
               </p>
               <div className="api-connections">
                 <span className="connected">Massive 연결됨</span>
-                <span className="connected">KRX 대조됨</span>
+                <span className="connected">KRX 확인됨</span>
                 <span className={state.data.providers.koreanRiskFree ? "connected" : ""}>
                   ECOS {state.data.providers.koreanRiskFree ? "연결됨" : "미연결"}
                 </span>
