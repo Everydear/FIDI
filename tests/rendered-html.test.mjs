@@ -51,7 +51,7 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /투자자 유형/);
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
-  assert.match(html, /현재 실제 편입 상품/);
+  assert.match(html, /현재 모델 편입안/);
   assert.match(html, /FUNETF/);
   assert.match(html, /네이버 금융/);
   assert.match(html, /TIGER 미국S&amp;P500/);
@@ -72,10 +72,13 @@ test("includes responsive and accessible controls", async () => {
   assert.match(html, /type="range"/);
   assert.match(html, /type="search"/);
   assert.match(html, /lang="ko"/);
-  assert.match(html, /현재 실제 편입 상품/);
+  assert.match(html, /현재 모델 편입안/);
   assert.match(html, /최신 편입 기준일/);
   assert.match(html, new RegExp(latestKoreaDateLabel().replaceAll(".", "\\.")));
-  assert.match(html, /기준일은\s*매일 자동으로 갱신됩니다/);
+  assert.match(html, /라인업 검증일/);
+  assert.match(html, /실시간 시세/);
+  assert.match(html, /미연동/);
+  assert.match(html, /선택안 링크 복사/);
   assert.match(html, /목표 자산배분/);
   assert.match(html, /종목은 데이터로/);
 });

@@ -247,6 +247,8 @@ const koreaDateFormatter = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+const lineupVerifiedAsOf = "2026.07.27";
+
 function latestKoreaDateLabel(date = new Date()) {
   const parts = Object.fromEntries(
     koreaDateFormatter
@@ -493,7 +495,28 @@ export default function Home() {
   const [holdingFilter, setHoldingFilter] =
     useState<HoldingFilter>("전체");
   const [query, setQuery] = useState("");
+  const [shareStatus, setShareStatus] = useState("");
   const holdingsAsOf = useLatestKoreaDate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedProfile = params.get("profile");
+    const sharedAmount = Number(params.get("amount"));
+
+    if (
+      sharedProfile &&
+      profiles.some((candidate) => candidate.code === sharedProfile)
+    ) {
+      setProfileCode(sharedProfile as ProfileCode);
+    }
+    if (
+      Number.isFinite(sharedAmount) &&
+      sharedAmount >= 10_000_000 &&
+      sharedAmount <= 500_000_000
+    ) {
+      setAmount(sharedAmount);
+    }
+  }, []);
 
   const profile = profiles.find(
     (candidate) => candidate.code === profileCode,
@@ -531,6 +554,21 @@ export default function Home() {
   const donutStyle = {
     "--donut": createDonut(profile.allocations),
   } as CSSProperties;
+
+  async function sharePortfolio() {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.searchParams.set("profile", profile.code);
+    shareUrl.searchParams.set("amount", String(amount));
+    shareUrl.hash = "portfolio";
+    window.history.replaceState({}, "", shareUrl);
+
+    try {
+      await navigator.clipboard.writeText(shareUrl.toString());
+      setShareStatus("선택안 링크를 복사했습니다.");
+    } catch {
+      setShareStatus("주소창의 링크를 복사해 공유해 주세요.");
+    }
+  }
 
   return (
     <main id="top">
@@ -839,12 +877,36 @@ export default function Home() {
         <div className="section-heading">
           <div>
             <span className="step-label">STEP 03 · HOLDINGS</span>
-            <h2>현재 실제 편입 상품</h2>
+            <h2>현재 모델 편입안</h2>
           </div>
           <p>
-            공식 상품명과 거래소 티커를 기준으로 표시합니다. 동적선정
-            상품은 현재 편입 종목이며 다음 점검 때 교체될 수 있습니다.
+            실제 거래 가능한 공식 상품명과 티커를 표시합니다. 현재
+            버전은 규칙 기반 모델안이며 실시간 시세와 주문은 연결되지
+            않았습니다.
           </p>
+        </div>
+
+        <div className="data-status-panel" role="note" aria-label="데이터 상태">
+          <div>
+            <span>화면 조회일</span>
+            <strong>{holdingsAsOf}</strong>
+            <small>한국시간 자동 갱신</small>
+          </div>
+          <div>
+            <span>라인업 검증일</span>
+            <strong>{lineupVerifiedAsOf}</strong>
+            <small>상품명·티커 확인</small>
+          </div>
+          <div className="pending">
+            <span>실시간 시세</span>
+            <strong>미연동</strong>
+            <small>주문 전 별도 확인</small>
+          </div>
+          <div className="pending">
+            <span>자동 주문</span>
+            <strong>미연동</strong>
+            <small>전략 설계 전용</small>
+          </div>
         </div>
 
         <div className="holdings-toolbar">
@@ -932,8 +994,8 @@ export default function Home() {
                     <small>{holding.vehicle}</small>
                     <b className={holding.dynamic ? "dynamic" : ""}>
                       {holding.dynamic
-                        ? "현재 편입 · 교체 가능"
-                        : "기준 편입"}
+                        ? "모델 편입 · 교체 대상"
+                        : "모델 기준 편입"}
                     </b>
                   </div>
                   <div className="holding-code">
@@ -961,12 +1023,11 @@ export default function Home() {
           </div>
         </div>
         <p className="data-note">
-          위 종목코드와 공식 명칭은 한국시간 {holdingsAsOf} 최신 조회
-          기준 모델 포트폴리오의 실제 기준 라인업입니다. 기준일은
-          매일 자동으로 갱신됩니다. 채권·현금성·대체자산
-          슬리브는 증권계좌에서 거래 가능한 ETF로 구현했습니다. 가격,
-          거래 가능 여부, 세금과 수수료는 주문 직전에 다시 확인해야
-          합니다.
+          화면 조회일은 한국시간 {holdingsAsOf}로 자동 갱신되지만,
+          상품 라인업은 {lineupVerifiedAsOf}에 공식 명칭과 티커를
+          확인한 규칙 기반 모델안입니다. 채권·현금성·대체자산 슬리브는
+          증권계좌에서 거래 가능한 ETF로 구현했습니다. 가격, 거래 가능
+          여부, 세금과 수수료는 주문 직전에 다시 확인해야 합니다.
         </p>
       </section>
 
@@ -983,6 +1044,16 @@ export default function Home() {
             정해진 날짜에 같은 기준으로 다시 평가해 교체 여부를
             결정합니다.
           </p>
+          <div className="model-phase" aria-label="자동화 진행 상태">
+            <div>
+              <span>현재 V4</span>
+              <strong>비중 계산 · 실상품 라인업</strong>
+            </div>
+            <div>
+              <span>NEXT</span>
+              <strong>시세 API · 자동 점수 · 교체 신호</strong>
+            </div>
+          </div>
           <div className="source-list">
             <a
               href="https://www.funetf.co.kr/"
@@ -1060,13 +1131,19 @@ export default function Home() {
       </section>
 
       <section className="closing-panel">
-        <div>
+        <div className="closing-copy">
           <span>FIDI KRW DYNAMIC V4</span>
-          <h2>지금 선택한 {profile.name} 구성을 기준안으로 저장하세요.</h2>
+          <h2>지금 선택한 {profile.name} 구성을 링크로 공유하세요.</h2>
         </div>
-        <a href="#portfolio">
-          포트폴리오 다시 보기 <span>↑</span>
-        </a>
+        <div className="closing-actions">
+          <button type="button" onClick={sharePortfolio}>
+            선택안 링크 복사 <span>↗</span>
+          </button>
+          <a href="#portfolio">
+            다시 보기 <span>↑</span>
+          </a>
+          <small aria-live="polite">{shareStatus}</small>
+        </div>
       </section>
 
       <footer>
