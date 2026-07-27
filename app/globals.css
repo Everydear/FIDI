@@ -2129,6 +2129,15 @@ footer {
   margin: 0;
 }
 
+.validation-grade {
+  color: var(--primary);
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  margin-top: 6px;
+}
+
 .readiness-hero dl {
   display: grid;
   gap: 8px;

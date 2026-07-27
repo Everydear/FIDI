@@ -191,6 +191,9 @@ type BacktestSuccess = {
       total: number;
     };
     statistics: {
+      activeReturnMean?: number;
+      activeHitRate?: number | null;
+      worstDailyActiveReturn?: number | null;
       informationRatio: number | null;
       rollingBeatRate: number | null;
       worstRollingExcess: number | null;
@@ -227,6 +230,14 @@ type BacktestSuccess = {
         maximumWeight: number;
         herfindahlIndex: number;
       };
+    };
+    decision: {
+      grade: "ROBUST" | "MIXED" | "LIMITED_DATA";
+      label: string;
+      criticalChecks: number;
+      passedChecks: number;
+      reviewIds: string[];
+      detail: string;
     };
     evidence: {
       researchUnitTests: number;
@@ -604,10 +615,15 @@ export function BacktestPanel({
             <div className="readiness-hero">
               <div>
                 <span>검증 요약</span>
+                <small className="validation-grade">
+                  종합 판정 · {state.data.guidance.decision.label} ·{" "}
+                  {state.data.guidance.decision.passedChecks}/
+                  {state.data.guidance.decision.criticalChecks}개 핵심 확인
+                </small>
                 <strong>{state.data.guidance.headline}</strong>
                 <p>
-                  데이터가 짧은 항목은 한계로 표시하고, 미래 관찰과
-                  체결 확인은 진행 순서로 안내합니다.
+                  {state.data.guidance.decision.detail} 데이터가 짧은 항목은
+                  한계로 표시하고, 미래 관찰과 체결 확인은 진행 순서로 안내합니다.
                 </p>
               </div>
               <dl>
@@ -643,6 +659,17 @@ export function BacktestPanel({
                       )}
                 </strong>
                 <small>기준 구성 대비</small>
+              </article>
+              <article>
+                <span>일별 초과수익 빈도</span>
+                <strong>
+                  {state.data.guidance.statistics.activeHitRate == null
+                    ? "—"
+                    : percent.format(
+                        state.data.guidance.statistics.activeHitRate,
+                      )}
+                </strong>
+                <small>기준 구성보다 높았던 거래일 비율</small>
               </article>
               <article>
                 <span>최근 6개월 상회 비율</span>

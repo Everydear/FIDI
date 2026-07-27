@@ -109,6 +109,11 @@ test("turns validation evidence into a neutral operating guide", () => {
   });
 
   assert.equal(guidance.mode, "GUIDANCE");
+  assert.equal(
+    guidance.checks.find((check) => check.id === "same-risk-benchmark").status,
+    "REVIEW",
+  );
+  assert.equal(guidance.decision.grade, "LIMITED_DATA");
   assert.ok(guidance.summary.limitedData >= 1);
   assert.ok(guidance.summary.inProgress >= 2);
   assert.ok(guidance.summary.action >= 1);
