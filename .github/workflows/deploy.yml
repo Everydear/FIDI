@@ -55,6 +55,11 @@ jobs:
       - name: Build and test
         run: pnpm test
 
+      - name: Ensure workers.dev subdomain
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3             -X PUT "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain"             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             -H "Content-Type: application/json"             --data '{"subdomain":"everydear-fidi"}'
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
