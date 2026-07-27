@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { BacktestPanel } from "./backtest-panel";
 
 type ProfileCode =
   | "CONSERVATIVE"
@@ -36,8 +37,6 @@ type Profile = {
   riskLevel: number;
   cadence: string;
   nextReview: string;
-  referenceReturn: string;
-  referenceDrawdown: string;
   allocations: Allocation[];
 };
 
@@ -94,8 +93,6 @@ const profiles: Profile[] = [
     riskLevel: 1,
     cadence: "분기",
     nextReview: "2026.10.30",
-    referenceReturn: "연 4~7%",
-    referenceDrawdown: "-8% 내외",
     allocations: buildAllocations({
       market: 10,
       strategy: 5,
@@ -114,8 +111,6 @@ const profiles: Profile[] = [
     riskLevel: 2,
     cadence: "분기",
     nextReview: "2026.10.30",
-    referenceReturn: "연 6~9%",
-    referenceDrawdown: "-12% 내외",
     allocations: buildAllocations({
       market: 20,
       strategy: 10,
@@ -134,8 +129,6 @@ const profiles: Profile[] = [
     riskLevel: 3,
     cadence: "분기",
     nextReview: "2026.10.30",
-    referenceReturn: "연 8~12%",
-    referenceDrawdown: "-16% 내외",
     allocations: buildAllocations({
       market: 25,
       strategy: 15,
@@ -154,8 +147,6 @@ const profiles: Profile[] = [
     riskLevel: 4,
     cadence: "월간 점검 · 분기 교체",
     nextReview: "2026.08.31",
-    referenceReturn: "연 10~15%",
-    referenceDrawdown: "-23% 내외",
     allocations: buildAllocations({
       market: 30,
       strategy: 20,
@@ -174,8 +165,6 @@ const profiles: Profile[] = [
     riskLevel: 5,
     cadence: "주간",
     nextReview: "매주 금요일",
-    referenceReturn: "대회 중 집계",
-    referenceDrawdown: "-10% 중단선",
     allocations: buildAllocations({
       market: 10,
       strategy: 30,
@@ -584,6 +573,7 @@ export default function Home() {
           <a href="#profile">투자자 유형</a>
           <a href="#portfolio">자산배분</a>
           <a href="#holdings">편입종목</a>
+          <a href="#backtest">백테스트</a>
           <a href="#rules">운용규칙</a>
         </nav>
         <span className="status-pill">
@@ -860,13 +850,13 @@ export default function Home() {
               <p>대체자산은 별도 분산 비중</p>
             </article>
             <article className="metric-card">
-              <span>참고 기대범위</span>
-              <strong>{profile.referenceReturn}</strong>
-              <p>장기 모델 가정치 · 보장 아님</p>
+              <span>성과 검증</span>
+              <strong>실데이터</strong>
+              <p>아래 백테스트에서 직접 계산</p>
             </article>
             <article className="metric-card accent">
-              <span>참고 최대낙폭</span>
-              <strong>{profile.referenceDrawdown}</strong>
+              <span>검증 전 숫자</span>
+              <strong>사용 안 함</strong>
               <p>다음 점검 {profile.nextReview}</p>
             </article>
           </aside>
@@ -994,7 +984,7 @@ export default function Home() {
                     <small>{holding.vehicle}</small>
                     <b className={holding.dynamic ? "dynamic" : ""}>
                       {holding.dynamic
-                        ? "모델 편입 · 교체 대상"
+                        ? "정기 교체 검토"
                         : "모델 기준 편입"}
                     </b>
                   </div>
@@ -1030,6 +1020,11 @@ export default function Home() {
           여부, 세금과 수수료는 주문 직전에 다시 확인해야 합니다.
         </p>
       </section>
+
+      <BacktestPanel
+        profileCode={profile.code}
+        profileName={profile.name}
+      />
 
       <section className="rules-section" id="rules">
         <div className="rules-intro">

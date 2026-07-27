@@ -52,6 +52,9 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
   assert.match(html, /현재 모델 편입안/);
+  assert.match(html, /실데이터 백테스트 실행/);
+  assert.match(html, /가정치가 아닌, 실제 가격으로 검증/);
+  assert.match(html, /정기 교체 검토/);
   assert.match(html, /FUNETF/);
   assert.match(html, /네이버 금융/);
   assert.match(html, /TIGER 미국S&amp;P500/);
@@ -81,4 +84,6 @@ test("includes responsive and accessible controls", async () => {
   assert.match(html, /선택안 링크 복사/);
   assert.match(html, /목표 자산배분/);
   assert.match(html, /종목은 데이터로/);
+  assert.doesNotMatch(html, /모델 편입 · 교체 대상/);
+  assert.doesNotMatch(html, /연 8~12%/);
 });

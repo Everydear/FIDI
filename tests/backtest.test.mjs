@@ -1,0 +1,112 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { runBacktest } from "../lib/backtest/engine.mjs";
+
+test("compounds adjusted prices without look-ahead", () => {
+  const result = runBacktest({
+    assets: [
+      {
+        id: "A",
+        weight: 1,
+        prices: [
+          { date: "2026-01-02", value: 100 },
+          { date: "2026-01-05", value: 110 },
+          { date: "2026-01-06", value: 121 },
+        ],
+      },
+    ],
+    cadence: "quarterly",
+    transactionCostBps: 0,
+    annualRiskFreeRate: 0,
+  });
+
+  assert.ok(Math.abs(result.metrics.totalReturn - 0.21) < 1e-12);
+  assert.equal(result.metrics.maximumDrawdown, 0);
+  assert.equal(result.metrics.rebalances, 0);
+  assert.equal(result.period.observations, 3);
+});
+
+test("forward-fills non-overlapping market holidays after common inception", () => {
+  const result = runBacktest({
+    assets: [
+      {
+        id: "KR",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-02", value: 100 },
+          { date: "2026-01-06", value: 110 },
+        ],
+      },
+      {
+        id: "US",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-05", value: 200 },
+          { date: "2026-01-06", value: 200 },
+        ],
+      },
+    ],
+    cadence: "quarterly",
+    transactionCostBps: 0,
+    annualRiskFreeRate: 0,
+  });
+
+  assert.equal(result.period.start, "2026-01-05");
+  assert.ok(Math.abs(result.metrics.totalReturn - 0.05) < 1e-12);
+});
+
+test("charges transaction costs only on scheduled rebalance turnover", () => {
+  const noCost = runBacktest({
+    assets: [
+      {
+        id: "A",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 120 },
+        ],
+      },
+      {
+        id: "B",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 100 },
+        ],
+      },
+    ],
+    cadence: "monthly",
+    transactionCostBps: 0,
+    annualRiskFreeRate: 0,
+  });
+  const withCost = runBacktest({
+    assets: [
+      {
+        id: "A",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 120 },
+        ],
+      },
+      {
+        id: "B",
+        weight: 0.5,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 100 },
+        ],
+      },
+    ],
+    cadence: "monthly",
+    transactionCostBps: 100,
+    annualRiskFreeRate: 0,
+  });
+
+  assert.equal(withCost.metrics.rebalances, 1);
+  assert.ok(withCost.metrics.totalTurnover > 0);
+  assert.ok(withCost.metrics.endingValue < noCost.metrics.endingValue);
+  assert.ok(withCost.metrics.cumulativeCost > 0);
+});
+
