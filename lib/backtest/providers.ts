@@ -33,6 +33,10 @@ async function cached<T>(key: string, loader: () => Promise<T>): Promise<T> {
   return value;
 }
 
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function compactDate(date: string) {
   return date.replaceAll("-", "");
 }
@@ -310,56 +314,61 @@ async function fetchKrxMarketDay(
   date: string,
   apiKey: string,
 ): Promise<Map<string, number>> {
-  const path =
-    dataset === "stock"
-      ? "https://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd"
-      : "https://data-dbg.krx.co.kr/svc/apis/etp/etf_bydd_trd";
-  const endpoint = new URL(path);
-  endpoint.searchParams.set("basDd", compactDate(date));
+  return cached(`krx:${dataset}:${date}`, async () => {
+    const path =
+      dataset === "stock"
+        ? "https://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd"
+        : "https://data-dbg.krx.co.kr/svc/apis/etp/etf_bydd_trd";
+    const endpoint = new URL(path);
+    endpoint.searchParams.set("basDd", compactDate(date));
+    let lastError = "";
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      headers: {
-        AUTH_KEY: apiKey,
-        Accept: "application/json",
-        "User-Agent":
-          "FIDI-Portfolio/4.0 (+https://fidi-portfolio-v4-2026.gwg03045.chatgpt.site)",
-      },
-      signal: AbortSignal.timeout(75_000),
-    });
-  } catch (error) {
-    throw new Error(
-      `KRX Open API HTTPS 연결에 실패했습니다 (${dataset}). ${
-        error instanceof Error ? error.message : ""
-      }`.trim(),
-    );
-  }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await wait(attempt * 1_200);
 
-  const payload = (await response.json().catch(() => ({}))) as {
-    respCode?: string;
-    respMsg?: string;
-    OutBlock_1?: Array<{
-      BAS_DD?: string;
-      ISU_CD?: string;
-      ISU_SRT_CD?: string;
-      TDD_CLSPRC?: string | number;
-    }>;
-  };
-  if (response.status === 401 || payload.respCode === "401") {
-    throw new Error(
-      `KRX ${dataset === "stock" ? "유가증권 일별매매정보" : "ETF 일별매매정보"} 서비스 활용 승인이 필요합니다.`,
-    );
-  }
-  if (!response.ok) {
-    throw new Error(
-      `KRX Open API 응답 오류 (${dataset}, ${response.status}): ${
-        payload.respMsg ?? "unknown"
-      }`,
-    );
-  }
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          headers: {
+            AUTH_KEY: apiKey,
+            Accept: "application/json",
+            "User-Agent":
+              "FIDI-Portfolio/4.1 (+https://fidi-portfolio-v4-2026.gwg03045.chatgpt.site)",
+          },
+          signal: AbortSignal.timeout(75_000),
+        });
+      } catch (error) {
+        lastError = `HTTPS 연결 실패: ${
+          error instanceof Error ? error.message : "unknown"
+        }`;
+        continue;
+      }
 
-  return parseKrxClosingPrices(payload.OutBlock_1 ?? []);
+      const payload = (await response.json().catch(() => ({}))) as {
+        respCode?: string;
+        respMsg?: string;
+        OutBlock_1?: Array<{
+          BAS_DD?: string;
+          ISU_CD?: string;
+          ISU_SRT_CD?: string;
+          TDD_CLSPRC?: string | number;
+        }>;
+      };
+      if (response.status === 401 || payload.respCode === "401") {
+        throw new Error(
+          `KRX ${dataset === "stock" ? "유가증권 일별매매정보" : "ETF 일별매매정보"} 서비스 활용 승인이 필요합니다.`,
+        );
+      }
+      if (response.ok) {
+        return parseKrxClosingPrices(payload.OutBlock_1 ?? []);
+      }
+
+      lastError = `${response.status}: ${payload.respMsg ?? "unknown"}`;
+      if (response.status < 500 && response.status !== 429) break;
+    }
+
+    throw new Error(`KRX Open API 응답 오류 (${dataset}, ${lastError})`);
+  });
 }
 
 export async function fetchKrxOfficialAudit(

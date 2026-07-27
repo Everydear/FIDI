@@ -26,12 +26,48 @@ type BacktestMetrics = {
 
 type CurvePoint = { date: string; value: number; drawdown: number };
 
-type ReadinessCheck = {
+type GuidanceStatus =
+  | "CHECKED"
+  | "REVIEW"
+  | "IN_PROGRESS"
+  | "LIMITED_DATA"
+  | "ACTION";
+
+type GuidanceCheck = {
   id: string;
   label: string;
-  status: "PASS" | "FAIL" | "PENDING";
-  blocker: boolean;
+  status: GuidanceStatus;
   detail: string;
+  guide: string;
+};
+
+type DailyCandidate = {
+  ticker: string;
+  name: string;
+  current: boolean;
+  latestDate: string;
+  latestValue: number;
+  return20: number;
+  return60: number;
+  volatility20: number;
+  drawdown60: number;
+  aboveMovingAverage20: boolean;
+  score: number;
+  rank: number;
+};
+
+type DailyGuideGroup = {
+  id: string;
+  name: string;
+  action: "MAINTAIN" | "REVIEW_CHANGE";
+  actionLabel: string;
+  leaderTicker: string;
+  leaderName: string;
+  currentTicker: string;
+  currentName: string;
+  scoreAdvantage: number;
+  reason: string;
+  candidates: DailyCandidate[];
 };
 
 type BacktestSuccess = {
@@ -62,6 +98,8 @@ type BacktestSuccess = {
   assumptions: {
     rebalance: "weekly" | "monthly" | "quarterly";
     lockedRebalance: "weekly" | "monthly" | "quarterly";
+    dailyEvaluation: boolean;
+    orderMode: "manual-approval";
     transactionCostBps: number;
     riskFreeRatePercent: number;
     adjustedClose: boolean;
@@ -108,16 +146,35 @@ type BacktestSuccess = {
     excessTotalReturn: number;
     excessCagr: number;
   };
-  readiness: {
-    verdict: "HOLD" | "READY";
-    readyForLiveCapital: boolean;
+  dailyGuide: {
+    version: string;
+    asOf: string;
+    profile: string;
+    evaluationCadence: "daily";
+    orderMode: "manual-approval";
+    switchThreshold: number;
+    transactionCostBps: number;
+    headline: string;
+    summary: {
+      groups: number;
+      maintain: number;
+      reviewChange: number;
+    };
+    executionGuide: string[];
+    dataNotice: string;
+    groups: DailyGuideGroup[];
+  };
+  guidance: {
+    mode: "GUIDANCE";
+    headline: string;
     checkedAt: string;
     summary: {
-      passed: number;
-      failed: number;
-      pending: number;
+      checked: number;
+      review: number;
+      inProgress: number;
+      limitedData: number;
+      action: number;
       total: number;
-      blockers: number;
     };
     statistics: {
       informationRatio: number | null;
@@ -140,7 +197,7 @@ type BacktestSuccess = {
       forwardObservationStart: string;
       earliestFormalReview: string;
     };
-    checks: ReadinessCheck[];
+    checks: GuidanceCheck[];
   };
 };
 
@@ -172,6 +229,14 @@ const cadenceLabel = {
   quarterly: "분기",
 };
 
+const guidanceStatusLabel: Record<GuidanceStatus, string> = {
+  CHECKED: "확인",
+  REVIEW: "검토",
+  IN_PROGRESS: "진행",
+  LIMITED_DATA: "데이터 한계",
+  ACTION: "다음 단계",
+};
+
 function curvePolyline(
   curve: BacktestSuccess["curve"],
   minimum: number,
@@ -196,6 +261,7 @@ export function BacktestPanel({
   profileName: string;
 }) {
   const [state, setState] = useState<BacktestState>({ kind: "idle" });
+  const [signalSaved, setSignalSaved] = useState(false);
 
   const chartLines = useMemo(
     () => {
@@ -220,7 +286,61 @@ export function BacktestPanel({
     [state],
   );
 
+  function recordDailySignal(data: BacktestSuccess) {
+    try {
+      const storageKey = "fidi-daily-signal-log-v4.1";
+      const stored = JSON.parse(
+        window.localStorage.getItem(storageKey) ?? "[]",
+      ) as Array<{
+        profile: string;
+        asOf: string;
+        generatedAt?: string;
+        guide?: BacktestSuccess["dailyGuide"];
+      }>;
+      const next = stored.filter(
+        (item) =>
+          item.profile !== data.profile || item.asOf !== data.dailyGuide.asOf,
+      );
+      next.push({
+        profile: data.profile,
+        asOf: data.dailyGuide.asOf,
+        generatedAt: data.generatedAt,
+        guide: data.dailyGuide,
+      });
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(next.slice(-365)),
+      );
+      setSignalSaved(true);
+    } catch {
+      setSignalSaved(false);
+    }
+  }
+
+  function downloadDailySignal() {
+    if (state.kind !== "success") return;
+    const payload = JSON.stringify(
+      {
+        generatedAt: state.data.generatedAt,
+        profile: state.data.profile,
+        dailyGuide: state.data.dailyGuide,
+        guidance: state.data.guidance,
+      },
+      null,
+      2,
+    );
+    const objectUrl = URL.createObjectURL(
+      new Blob([payload], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `fidi-${state.data.profile}-${state.data.dailyGuide.asOf}.json`;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+  }
+
   async function executeBacktest() {
+    setSignalSaved(false);
     setState({ kind: "loading" });
     try {
       const response = await fetch(
@@ -237,13 +357,15 @@ export function BacktestPanel({
         });
         return;
       }
-      setState({ kind: "success", data: payload as BacktestSuccess });
+      const verified = payload as BacktestSuccess;
+      recordDailySignal(verified);
+      setState({ kind: "success", data: verified });
     } catch {
       setState({
         kind: "error",
         data: {
           status: "network_error",
-          message: "백테스트 API에 연결하지 못했습니다.",
+          message: "운용 가이드 API에 연결하지 못했습니다.",
           setup: "잠시 후 다시 실행해 주세요.",
         },
       });
@@ -254,12 +376,12 @@ export function BacktestPanel({
     <section className="backtest-section" id="backtest">
       <div className="backtest-heading">
         <div>
-          <span className="step-label">STEP 04 · BACKTEST</span>
-          <h2>공식 데이터로 전체 포트폴리오 검증</h2>
+          <span className="step-label">STEP 04 · DAILY GUIDE</span>
+          <h2>오늘 데이터로 운용 가이드 만들기</h2>
           <p>
-            Massive·KRX·FRED·ECOS 자료로 배당·분할·환율·비용을 반영하고,
-            현재 {profileName} 전체 구성을 동일위험 정책 기준선과 비교한 뒤
-            실운용 준비요건까지 판정합니다.
+            매일 최신 가격으로 ETF와 섹터별 후보를 다시 점수화합니다.
+            현재 {profileName} 구성을 유지할지, 교체 후보를 비교할지와
+            주문 전 확인 순서를 함께 보여줍니다.
           </p>
         </div>
         <button
@@ -271,24 +393,24 @@ export function BacktestPanel({
           {state.kind === "loading"
             ? "데이터 수집·계산 중…"
             : state.kind === "success"
-              ? "최신 데이터로 다시 실행"
-              : "실데이터 백테스트 실행"}
+              ? "오늘 데이터로 다시 계산"
+              : "오늘 운용 가이드 계산"}
         </button>
       </div>
 
       {state.kind === "idle" && (
         <div className="backtest-empty">
-          <span>API READY</span>
-          <strong>아직 계산되지 않았습니다.</strong>
+          <span>DAILY SIGNAL</span>
+          <strong>오늘의 후보 순위를 확인해 보세요.</strong>
           <p>
-            버튼을 누르면 서버가 가격과 금리를 새로 확인합니다. 화면의
-            기존 기대수익률 숫자는 백테스트 결과로 간주하지 않습니다.
+            버튼을 누르면 가격·환율·금리를 새로 확인하고, 현재 편입과
+            대안 후보의 20일·60일 흐름과 변동성을 비교합니다.
           </p>
           <div>
             <i>01</i> Massive 미국 종가·배당
-            <i>02</i> KRX 최근 종가 대조
-            <i>03</i> FRED 환율·비용
-            <i>04</i> 실운용 게이트 판정
+            <i>02</i> KRX 후보 종가 대조
+            <i>03</i> 매일 후보 점수 계산
+            <i>04</i> 교체·비용·승인 가이드
           </div>
         </div>
       )}
@@ -296,14 +418,14 @@ export function BacktestPanel({
       {state.kind === "loading" && (
         <div className="backtest-loading" role="status">
           <i />
-          <strong>공식 데이터 출처를 확인하고 총수익률을 계산합니다.</strong>
+          <strong>오늘의 후보 순위와 운용 가이드를 계산합니다.</strong>
           <span>Massive 무료 호출 한도 때문에 첫 실행은 조금 걸릴 수 있습니다.</span>
         </div>
       )}
 
       {state.kind === "error" && (
         <div className="backtest-error" role="alert">
-          <span>검증을 완료하지 못했습니다</span>
+          <span>운용 가이드를 계산하지 못했습니다</span>
           <strong>{state.data.message}</strong>
           {state.data.setup && <p>{state.data.setup}</p>}
           <button type="button" onClick={executeBacktest}>
@@ -326,38 +448,136 @@ export function BacktestPanel({
             </p>
           </div>
 
+          <section className="daily-guide-card" aria-label="오늘 운용 가이드">
+            <div className="daily-guide-hero">
+              <div>
+                <span>
+                  DAILY SIGNAL · {state.data.dailyGuide.asOf} ·{" "}
+                  {state.data.dailyGuide.version}
+                </span>
+                <strong>{state.data.dailyGuide.headline}</strong>
+                <p>
+                  매일 평가 · 교체 우위{" "}
+                  {percent.format(state.data.dailyGuide.switchThreshold)} 이상
+                  비교 · 최종 주문은 사용자 승인
+                </p>
+              </div>
+              <div className="daily-guide-summary">
+                <div>
+                  <span>현재 유지</span>
+                  <strong>{state.data.dailyGuide.summary.maintain}</strong>
+                </div>
+                <div>
+                  <span>교체 비교</span>
+                  <strong>{state.data.dailyGuide.summary.reviewChange}</strong>
+                </div>
+                <button type="button" onClick={downloadDailySignal}>
+                  오늘 신호 JSON 저장
+                </button>
+                <small>
+                  {signalSaved
+                    ? "이 기기에 오늘 기록을 저장했습니다."
+                    : "계산 결과를 날짜별로 보관할 수 있습니다."}
+                </small>
+              </div>
+            </div>
+
+            <div className="daily-guide-groups">
+              {state.data.dailyGuide.groups.map((group) => (
+                <article
+                  key={group.id}
+                  className={
+                    group.action === "REVIEW_CHANGE" ? "review-change" : ""
+                  }
+                >
+                  <header>
+                    <div>
+                      <span>{group.name}</span>
+                      <strong>{group.actionLabel}</strong>
+                    </div>
+                    <small>{group.reason}</small>
+                  </header>
+                  <div className="candidate-list">
+                    {group.candidates.map((candidate) => (
+                      <div
+                        key={candidate.ticker}
+                        className={`${candidate.rank === 1 ? "leader" : ""} ${
+                          candidate.current ? "current" : ""
+                        }`}
+                      >
+                        <b>{candidate.rank}</b>
+                        <p>
+                          <strong>{candidate.name}</strong>
+                          <span>
+                            {candidate.ticker}
+                            {candidate.current ? " · 현재 편입" : " · 대안 후보"}
+                          </span>
+                        </p>
+                        <dl>
+                          <div>
+                            <dt>20일</dt>
+                            <dd>{percent.format(candidate.return20)}</dd>
+                          </div>
+                          <div>
+                            <dt>60일</dt>
+                            <dd>{percent.format(candidate.return60)}</dd>
+                          </div>
+                          <div>
+                            <dt>점수</dt>
+                            <dd>{percent.format(candidate.score)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="execution-guide">
+              <div>
+                <span>ORDER CHECKLIST</span>
+                <strong>교체 신호가 나온 날의 확인 순서</strong>
+              </div>
+              <ol>
+                {state.data.dailyGuide.executionGuide.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
           <section
-            className={`readiness-card ${
-              state.data.readiness.readyForLiveCapital ? "ready" : "hold"
-            }`}
-            aria-label="실운용 준비도 판정"
+            className="readiness-card guide"
+            aria-label="운용 전 확인 가이드"
           >
             <div className="readiness-hero">
               <div>
-                <span>PRE-LIVE VALIDATION · {state.data.readiness.verdict}</span>
-                <strong>
-                  {state.data.readiness.readyForLiveCapital
-                    ? "실제자금 운용 준비 완료"
-                    : "실제자금 투입 보류"}
-                </strong>
+                <span>PORTFOLIO REVIEW GUIDE</span>
+                <strong>{state.data.guidance.headline}</strong>
                 <p>
-                  {state.data.readiness.readyForLiveCapital
-                    ? "잠금된 필수 검증 게이트를 모두 통과했습니다."
-                    : `${state.data.readiness.summary.blockers}개 필수 게이트가 남았습니다. 과거 수익률만으로 운용을 시작하면 안 됩니다.`}
+                  데이터가 짧은 항목은 한계로 표시하고, 미래 관찰과
+                  체결 확인은 진행 순서로 안내합니다.
                 </p>
               </div>
               <dl>
                 <div>
-                  <dt>통과</dt>
-                  <dd>{state.data.readiness.summary.passed}</dd>
+                  <dt>확인</dt>
+                  <dd>{state.data.guidance.summary.checked}</dd>
                 </div>
                 <div>
-                  <dt>실패</dt>
-                  <dd>{state.data.readiness.summary.failed}</dd>
+                  <dt>살펴보기</dt>
+                  <dd>
+                    {state.data.guidance.summary.review +
+                      state.data.guidance.summary.limitedData}
+                  </dd>
                 </div>
                 <div>
-                  <dt>대기</dt>
-                  <dd>{state.data.readiness.summary.pending}</dd>
+                  <dt>진행·다음</dt>
+                  <dd>
+                    {state.data.guidance.summary.inProgress +
+                      state.data.guidance.summary.action}
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -366,10 +586,10 @@ export function BacktestPanel({
               <article>
                 <span>정보비율</span>
                 <strong>
-                  {state.data.readiness.statistics.informationRatio === null
+                  {state.data.guidance.statistics.informationRatio === null
                     ? "—"
                     : number.format(
-                        state.data.readiness.statistics.informationRatio,
+                        state.data.guidance.statistics.informationRatio,
                       )}
                 </strong>
                 <small>동일위험 기준선 대비</small>
@@ -377,10 +597,10 @@ export function BacktestPanel({
               <article>
                 <span>6개월 구간 승률</span>
                 <strong>
-                  {state.data.readiness.statistics.rollingBeatRate === null
+                  {state.data.guidance.statistics.rollingBeatRate === null
                     ? "—"
                     : percent.format(
-                        state.data.readiness.statistics.rollingBeatRate,
+                        state.data.guidance.statistics.rollingBeatRate,
                       )}
                 </strong>
                 <small>126거래일 롤링</small>
@@ -389,7 +609,7 @@ export function BacktestPanel({
                 <span>비용 3배 초과 CAGR</span>
                 <strong>
                   {percent.format(
-                    state.data.readiness.statistics.costStressExcessCagr,
+                    state.data.guidance.statistics.costStressExcessCagr,
                   )}
                 </strong>
                 <small>{state.data.assumptions.transactionCostBps * 3}bp 스트레스</small>
@@ -398,7 +618,7 @@ export function BacktestPanel({
                 <span>21일 지연 초과 CAGR</span>
                 <strong>
                   {percent.format(
-                    state.data.readiness.statistics.delayedStartExcessCagr,
+                    state.data.guidance.statistics.delayedStartExcessCagr,
                   )}
                 </strong>
                 <small>시작일 민감도</small>
@@ -407,7 +627,7 @@ export function BacktestPanel({
                 <span>낙폭 차이</span>
                 <strong>
                   {percent.format(
-                    state.data.readiness.statistics.maximumDrawdownGap,
+                    state.data.guidance.statistics.maximumDrawdownGap,
                   )}
                 </strong>
                 <small>양수면 기준선보다 방어적</small>
@@ -415,30 +635,31 @@ export function BacktestPanel({
             </div>
 
             <div className="readiness-checks">
-              {state.data.readiness.checks.map((check) => (
+              {state.data.guidance.checks.map((check) => (
                 <article key={check.id} className={check.status.toLowerCase()}>
-                  <span>{check.status}</span>
+                  <span>{guidanceStatusLabel[check.status]}</span>
                   <div>
                     <strong>{check.label}</strong>
                     <p>{check.detail}</p>
+                    <small>{check.guide}</small>
                   </div>
                 </article>
               ))}
             </div>
 
             <div className="research-evidence">
-              <strong>연구 파이프라인 증거</strong>
+              <strong>미래 관찰 기록</strong>
               <p>
-                단위테스트 {state.data.readiness.evidence.researchUnitTests}개 통과 ·
+                단위테스트 {state.data.guidance.evidence.researchUnitTests}개 ·
                 V3 결합 데이터{" "}
-                {state.data.readiness.evidence.v3CombinedRows.toLocaleString("ko-KR")}행 ·
+                {state.data.guidance.evidence.v3CombinedRows.toLocaleString("ko-KR")}행 ·
                 기준 백테스트{" "}
-                {state.data.readiness.evidence.v3ReferenceObservations.toLocaleString("ko-KR")}관측치
+                {state.data.guidance.evidence.v3ReferenceObservations.toLocaleString("ko-KR")}관측치
               </p>
               <span>
-                단, 회고 결과이며 OOS 아님 · 전진 관찰{" "}
-                {state.data.readiness.evidence.forwardObservationStart} 시작 · 최초 정식
-                검토 {state.data.readiness.evidence.earliestFormalReview}
+                미래 데이터 관찰{" "}
+                {state.data.guidance.evidence.forwardObservationStart} 시작 · 1년
+                기록 확인 {state.data.guidance.evidence.earliestFormalReview}
               </span>
             </div>
           </section>
@@ -584,7 +805,7 @@ export function BacktestPanel({
                   <dd>{state.data.assumptions.transactionCostBps}bp / 회전금액</dd>
                 </div>
                 <div>
-                  <dt>잠금 정책 주기</dt>
+                  <dt>기준 실행 주기</dt>
                   <dd>{cadenceLabel[state.data.assumptions.lockedRebalance]}</dd>
                 </div>
                 <div>

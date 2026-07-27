@@ -576,12 +576,12 @@ export default function Home() {
           <a href="#profile">투자자 유형</a>
           <a href="#portfolio">자산배분</a>
           <a href="#holdings">편입종목</a>
-          <a href="#backtest">백테스트</a>
+          <a href="#backtest">오늘 운용가이드</a>
           <a href="#rules">운용규칙</a>
         </nav>
         <span className="status-pill">
           <i />
-          KRW Dynamic V4
+          KRW Dynamic V4.1
         </span>
       </header>
 
@@ -660,8 +660,8 @@ export default function Home() {
         </article>
         <article>
           <span>운용 주기</span>
-          <strong>주간~분기</strong>
-          <small>유형별 교체 속도 차등</small>
+          <strong>매일 점검</strong>
+          <small>교체는 비용·점수 기준 적용</small>
         </article>
       </section>
 
@@ -855,7 +855,7 @@ export default function Home() {
             <article className="metric-card">
               <span>성과 검증</span>
               <strong>실데이터</strong>
-              <p>아래 백테스트에서 직접 계산</p>
+              <p>아래 운용가이드에서 직접 계산</p>
             </article>
             <article className="metric-card accent">
               <span>검증 전 숫자</span>
@@ -1040,17 +1040,17 @@ export default function Home() {
           </h2>
           <p>
             한 번 고른 ETF와 주식을 영구 보유하는 구조가 아닙니다.
-            정해진 날짜에 같은 기준으로 다시 평가해 교체 여부를
-            결정합니다.
+            매일 같은 기준으로 후보를 다시 평가하고, 점수 우위와
+            거래비용을 함께 본 뒤 교체 여부를 안내합니다.
           </p>
           <div className="model-phase" aria-label="자동화 진행 상태">
             <div>
-              <span>현재 V4</span>
-              <strong>공식 시세 대조 · 실데이터 백테스트</strong>
+              <span>현재 V4.1</span>
+              <strong>매일 후보 점수 · 교체 비교 · 주문 가이드</strong>
             </div>
             <div>
-              <span>NEXT</span>
-              <strong>자동 점수 · 편입 교체 신호</strong>
+              <span>ORDER MODE</span>
+              <strong>수량·가격 확인 후 사용자 승인</strong>
             </div>
           </div>
           <div className="source-list">
@@ -1121,8 +1121,9 @@ export default function Home() {
               <small>REBALANCE</small>
               <h3>유형별 주기로 실행</h3>
               <p>
-                일반 유형은 월간 점검·분기 리밸런싱, 대회형은 주간
-                교체와 별도 손실중단 규칙을 사용합니다.
+                모든 유형을 매일 평가하고, 일반형은 분기·성장형은
+                월간·대회형은 주간 실행 주기와 교체 우위 기준을 함께
+                사용합니다.
               </p>
             </div>
           </article>
@@ -1131,7 +1132,7 @@ export default function Home() {
 
       <section className="closing-panel">
         <div className="closing-copy">
-          <span>FIDI KRW DYNAMIC V4</span>
+          <span>FIDI KRW DYNAMIC V4.1</span>
           <h2>지금 선택한 {profile.name} 구성을 링크로 공유하세요.</h2>
         </div>
         <div className="closing-actions">

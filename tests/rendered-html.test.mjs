@@ -52,12 +52,12 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
   assert.match(html, /현재 모델 편입안/);
-  assert.match(html, /실데이터 백테스트 실행/);
-  assert.match(html, /공식 데이터로 전체 포트폴리오 검증/);
+  assert.match(html, /오늘 데이터로 운용 가이드 만들기/);
+  assert.match(html, /오늘 운용 가이드 계산/);
   assert.match(html, /Massive 미국 종가·배당/);
-  assert.match(html, /실운용 게이트 판정/);
-  assert.match(html, /동일위험 정책 기준선/);
-  assert.match(html, /정기 교체 검토/);
+  assert.match(html, /교체·비용·승인 가이드/);
+  assert.match(html, /매일 점검/);
+  assert.match(html, /유형별 주기로 실행/);
   assert.match(html, /FUNETF/);
   assert.match(html, /네이버 금융/);
   assert.match(html, /TIGER 미국S&amp;P500/);

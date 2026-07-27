@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildLiveReadiness,
+  buildValidationGuide,
   calculateConcentration,
   calculateRelativeStatistics,
 } from "../lib/backtest/validation.mjs";
@@ -37,7 +37,7 @@ test("reports maximum holding and Herfindahl concentration", () => {
   assert.ok(Math.abs(concentration.herfindahlIndex - 0.38) < 1e-12);
 });
 
-test("holds live capital when policy and forward-OOS gates are incomplete", () => {
+test("turns validation evidence into a neutral operating guide", () => {
   const result = {
     period: { years: 2, observations: 5 },
     metrics: {
@@ -56,7 +56,7 @@ test("holds live capital when policy and forward-OOS gates are incomplete", () =
     fullCurve: curve([1, 1.01, 1.02, 1.03, 1.04]),
   };
 
-  const readiness = buildLiveReadiness({
+  const guidance = buildValidationGuide({
     profile: "MODERATE",
     result,
     policyBenchmark,
@@ -85,12 +85,21 @@ test("holds live capital when policy and forward-OOS gates are incomplete", () =
     assetWeights: [0.5, 0.3, 0.2],
   });
 
-  assert.equal(readiness.verdict, "HOLD");
-  assert.equal(readiness.readyForLiveCapital, false);
-  assert.ok(readiness.summary.failed >= 2);
-  assert.ok(readiness.summary.pending >= 3);
+  assert.equal(guidance.mode, "GUIDANCE");
+  assert.ok(guidance.summary.limitedData >= 1);
+  assert.ok(guidance.summary.inProgress >= 2);
+  assert.ok(guidance.summary.action >= 1);
   assert.equal(
-    readiness.checks.find((check) => check.id === "forward-oos").status,
-    "PENDING",
+    guidance.checks.find((check) => check.id === "forward-oos").status,
+    "IN_PROGRESS",
+  );
+  assert.equal(
+    guidance.checks.find((check) => check.id === "sample-length").status,
+    "LIMITED_DATA",
+  );
+  assert.ok(
+    guidance.checks.every(
+      (check) => !["FAIL", "PENDING", "HOLD"].includes(check.status),
+    ),
   );
 });

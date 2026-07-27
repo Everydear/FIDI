@@ -4,10 +4,12 @@ import { runBacktest } from "@/lib/backtest/engine.mjs";
 import {
   getBacktestAssets,
   getBacktestCadence,
+  getDailyCandidateGroups,
   getLockedCadence,
   getLockedProfileWeights,
   getProfileWeights,
   isBacktestProfileCode,
+  type BacktestAsset,
   type RebalanceCadence,
   type Sleeve,
 } from "@/lib/backtest/portfolio";
@@ -22,7 +24,8 @@ import {
   type PricePoint,
   type PriceProvider,
 } from "@/lib/backtest/providers";
-import { buildLiveReadiness } from "@/lib/backtest/validation.mjs";
+import { buildDailyGuide } from "@/lib/backtest/daily-guide.mjs";
+import { buildValidationGuide } from "@/lib/backtest/validation.mjs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
@@ -117,6 +120,14 @@ function publicResult<T extends { fullCurve: unknown }>(result: T) {
   return value;
 }
 
+function uniqueAssets(assets: BacktestAsset[]) {
+  const byTicker = new Map<string, BacktestAsset>();
+  for (const asset of assets) {
+    if (!byTicker.has(asset.id)) byTicker.set(asset.id, asset);
+  }
+  return [...byTicker.values()];
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const profileValue = url.searchParams.get("profile");
@@ -146,9 +157,16 @@ export async function GET(request: Request) {
   const krxAuthKey = process.env.KRX_AUTH_KEY?.trim();
   const fredKey = process.env.FRED_KEY?.trim();
   const assets = getBacktestAssets(profileValue);
+  const candidateGroups = getDailyCandidateGroups(profileValue);
+  const candidateAssets = candidateGroups.flatMap((group) =>
+    group.candidates.map((candidate) => candidate.asset),
+  );
+  const universeAssets = uniqueAssets([...assets, ...candidateAssets]);
   const usTickers = [
     ...new Set(
-      assets.filter((asset) => asset.market === "US").map((asset) => asset.id),
+      universeAssets
+        .filter((asset) => asset.market === "US")
+        .map((asset) => asset.id),
     ),
   ];
 
@@ -177,8 +195,8 @@ export async function GET(request: Request) {
         fetchMassiveDividendEvents(usTickers, start, end, massiveApiKey),
       ]);
 
-    const pricedAssets = await Promise.all(
-      assets.map(async (asset) => {
+    const pricedUniverse = await Promise.all(
+      universeAssets.map(async (asset) => {
         const result = await fetchAssetSeries(asset, start, end, {
           massiveApiKey,
           dividendEvents,
@@ -196,12 +214,24 @@ export async function GET(request: Request) {
         };
       }),
     );
+    const pricedByTicker = new Map(
+      pricedUniverse.map((asset) => [asset.id, asset]),
+    );
+    const pricedAssets = assets.map((asset) => {
+      const priced = pricedByTicker.get(asset.id);
+      if (!priced) throw new Error(`${asset.id} 가격을 찾을 수 없습니다.`);
+      return {
+        ...priced,
+        sleeve: asset.sleeve,
+        weight: asset.weight,
+      };
+    });
 
     const seriesByTicker = new Map(
-      pricedAssets.map((asset) => [asset.id, asset.prices]),
+      pricedUniverse.map((asset) => [asset.id, asset.prices]),
     );
     const krxAudit = await fetchKrxOfficialAudit(
-      assets,
+      universeAssets,
       seriesByTicker,
       end,
       krxAuthKey,
@@ -214,6 +244,26 @@ export async function GET(request: Request) {
     const cadence = getBacktestCadence(profileValue);
     const lockedCadence = getLockedCadence(profileValue);
     const transactionCostBps = profileValue === "CONTEST" ? 30 : 20;
+    const dailyGuide = buildDailyGuide({
+      profile: profileValue,
+      transactionCostBps,
+      groups: candidateGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        candidates: group.candidates.map((candidate) => {
+          const priced = pricedByTicker.get(candidate.asset.id);
+          if (!priced) {
+            throw new Error(`${candidate.asset.id} 후보 가격을 찾을 수 없습니다.`);
+          }
+          return {
+            ticker: candidate.asset.id,
+            name: candidate.asset.name,
+            current: candidate.current,
+            prices: priced.prices,
+          };
+        }),
+      })),
+    });
     const result = runBacktest({
       assets: pricedAssets,
       cadence,
@@ -289,7 +339,7 @@ export async function GET(request: Request) {
       transactionCostBps,
       annualRiskFreeRate,
     });
-    const readiness = buildLiveReadiness({
+    const guidance = buildValidationGuide({
       profile: profileValue,
       result,
       policyBenchmark: benchmark,
@@ -314,14 +364,14 @@ export async function GET(request: Request) {
       assetWeights: pricedAssets.map((asset) => asset.weight),
     });
     const providers = [
-      ...new Set(pricedAssets.map((asset) => asset.provider)),
+      ...new Set(pricedUniverse.map((asset) => asset.provider)),
     ];
     const warnings = [
       "공식 채택 판단은 같은 주식·채권·금·현금 위험예산을 가진 정책 기준선과 비교합니다. TIGER 미국S&P500(360750) 100% 보유는 시장 참고치일 뿐 채택 벤치마크가 아닙니다.",
       "현재 화면의 고정 편입 종목을 과거에도 보유했다고 가정한 검증입니다. 과거 시점의 종목 선정 규칙 자체를 검증한 결과는 아닙니다.",
       "미국 가격은 Massive SIP 종가와 배당·분할 자료로 총수익률을 재구성했습니다. 국내 전체 이력은 수정주가를 사용하고 최근 종가는 KRX Open API와 교차 대조했습니다.",
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
-      "성과가 기준선을 상회하더라도 point-in-time 후보군, 사전 잠금 후 전진 OOS, 실제 체결 드라이런이 끝나기 전에는 실자금 투입 판정을 내리지 않습니다.",
+      "일일 가이드는 자동 주문이 아닙니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인하고 사용자가 최종 결정합니다.",
     ];
     if (requestedStart < minimumStart) {
       warnings.push(
@@ -363,6 +413,8 @@ export async function GET(request: Request) {
         fx: "FRED DEXKOUS 일별 원/달러 환율로 원화 환산",
         rebalance: cadence,
         lockedRebalance: lockedCadence,
+        dailyEvaluation: true,
+        orderMode: "manual-approval",
         transactionCostBps,
         initialPurchaseCost: "포트폴리오와 벤치마크 모두 제외",
         riskFreeRatePercent: annualRiskFreeRate * 100,
@@ -397,7 +449,8 @@ export async function GET(request: Request) {
         lastPriceDate: prices.at(-1)?.date,
         observations: prices.length,
       })),
-      readiness,
+      dailyGuide,
+      guidance,
       warnings,
       ...publicResult(result),
     });

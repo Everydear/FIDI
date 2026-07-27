@@ -37,6 +37,15 @@ export type SleeveWeights = {
 
 export type RebalanceCadence = "weekly" | "monthly" | "quarterly";
 
+export type DailyCandidateGroup = {
+  id: string;
+  name: string;
+  candidates: Array<{
+    asset: BacktestAsset;
+    current: boolean;
+  }>;
+};
+
 const PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
   CONSERVATIVE: {
     market: 10,
@@ -86,51 +95,11 @@ const PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
 };
 
 const LOCKED_PROFILE_WEIGHTS: Record<BacktestProfileCode, SleeveWeights> = {
-  CONSERVATIVE: {
-    market: 15,
-    strategy: 3,
-    stocks: 2,
-    government: 45.5,
-    credit: 19.5,
-    alternative: 5,
-    cash: 10,
-  },
-  MODERATE_CONSERVATIVE: {
-    market: 25,
-    strategy: 7,
-    stocks: 3,
-    government: 38.5,
-    credit: 16.5,
-    alternative: 5,
-    cash: 5,
-  },
-  MODERATE: {
-    market: 35,
-    strategy: 10,
-    stocks: 5,
-    government: 28,
-    credit: 12,
-    alternative: 7,
-    cash: 3,
-  },
-  GROWTH: {
-    market: 50,
-    strategy: 15,
-    stocks: 5,
-    government: 14,
-    credit: 6,
-    alternative: 7,
-    cash: 3,
-  },
-  CONTEST: {
-    market: 10,
-    strategy: 30,
-    stocks: 50,
-    government: 0,
-    credit: 0,
-    alternative: 0,
-    cash: 10,
-  },
+  CONSERVATIVE: { ...PROFILE_WEIGHTS.CONSERVATIVE },
+  MODERATE_CONSERVATIVE: { ...PROFILE_WEIGHTS.MODERATE_CONSERVATIVE },
+  MODERATE: { ...PROFILE_WEIGHTS.MODERATE },
+  GROWTH: { ...PROFILE_WEIGHTS.GROWTH },
+  CONTEST: { ...PROFILE_WEIGHTS.CONTEST },
 };
 
 const ASSETS = {
@@ -241,6 +210,62 @@ const ASSETS = {
     krxDataset: "etf" as const,
     sleeve: "cash" as const,
   },
+  dailyAlternatives: {
+    strategy: {
+      id: "381170",
+      name: "TIGER 미국테크TOP10 INDXX",
+      yahooSymbol: "381170.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "etf" as const,
+      sleeve: "strategy" as const,
+    },
+    aiSemiconductor: {
+      id: "005930",
+      name: "삼성전자(주)",
+      yahooSymbol: "005930.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
+    },
+    healthcare: {
+      id: "207940",
+      name: "삼성바이오로직스(주)",
+      yahooSymbol: "207940.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
+    },
+    consumerDefensive: {
+      id: "033780",
+      name: "(주)케이티앤지",
+      yahooSymbol: "033780.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
+    },
+    mobility: {
+      id: "000270",
+      name: "기아(주)",
+      yahooSymbol: "000270.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
+    },
+    finance: {
+      id: "055550",
+      name: "(주)신한금융지주회사",
+      yahooSymbol: "055550.KS",
+      currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
+      sleeve: "stocks" as const,
+    },
+  },
 };
 
 function weighted(
@@ -267,7 +292,7 @@ export function getBacktestCadence(
 export function getLockedCadence(
   profile: BacktestProfileCode,
 ): RebalanceCadence {
-  return profile === "CONTEST" ? "weekly" : "quarterly";
+  return getBacktestCadence(profile);
 }
 
 export function getProfileWeights(
@@ -310,4 +335,57 @@ export function getBacktestAssets(
   }
 
   return assets.filter((asset) => asset.weight > 0);
+}
+
+function unweighted(
+  asset: Omit<BacktestAsset, "weight">,
+): BacktestAsset {
+  return { ...asset, weight: 0 };
+}
+
+export function getDailyCandidateGroups(
+  profile: BacktestProfileCode,
+): DailyCandidateGroup[] {
+  const currentTickers = new Set(
+    getBacktestAssets(profile).map((asset) => asset.id),
+  );
+  const group = (
+    id: string,
+    name: string,
+    candidates: Array<Omit<BacktestAsset, "weight">>,
+  ): DailyCandidateGroup => ({
+    id,
+    name,
+    candidates: candidates.map((asset) => ({
+      asset: unweighted(asset),
+      current: currentTickers.has(asset.id),
+    })),
+  });
+
+  return [
+    group("strategy-etf", "전략 ETF", [
+      ASSETS.strategy,
+      ASSETS.dailyAlternatives.strategy,
+    ]),
+    group("ai-semiconductor", "AI·반도체", [
+      ASSETS.stocks[0],
+      ASSETS.dailyAlternatives.aiSemiconductor,
+    ]),
+    group("healthcare", "헬스케어", [
+      ASSETS.stocks[1],
+      ASSETS.dailyAlternatives.healthcare,
+    ]),
+    group("consumer-defensive", "필수소비재", [
+      ASSETS.stocks[2],
+      ASSETS.dailyAlternatives.consumerDefensive,
+    ]),
+    group("mobility", "산업재·모빌리티", [
+      ASSETS.stocks[3],
+      ASSETS.dailyAlternatives.mobility,
+    ]),
+    group("finance", "금융", [
+      ASSETS.stocks[4],
+      ASSETS.dailyAlternatives.finance,
+    ]),
+  ];
 }
