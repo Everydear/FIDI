@@ -1042,11 +1042,11 @@ export default function Home() {
           <div className="model-phase" aria-label="자동화 진행 상태">
             <div>
               <span>현재 V4</span>
-              <strong>비중 계산 · 실상품 라인업</strong>
+              <strong>공식 시세 대조 · 실데이터 백테스트</strong>
             </div>
             <div>
               <span>NEXT</span>
-              <strong>시세 API · 자동 점수 · 교체 신호</strong>
+              <strong>자동 점수 · 편입 교체 신호</strong>
             </div>
           </div>
           <div className="source-list">

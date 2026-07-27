@@ -9,8 +9,9 @@ export type BacktestAsset = {
   id: string;
   name: string;
   yahooSymbol: string;
-  eodhdSymbol: string;
   currency: "KRW" | "USD";
+  market: "KRX" | "US";
+  krxDataset?: "stock" | "etf";
   weight: number;
 };
 
@@ -77,87 +78,96 @@ const ASSETS = {
     id: "360750",
     name: "TIGER 미국S&P500",
     yahooSymbol: "360750.KS",
-    eodhdSymbol: "360750.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   strategy: {
     id: "133690",
     name: "TIGER 미국나스닥100",
     yahooSymbol: "133690.KS",
-    eodhdSymbol: "133690.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   contestStrategy: {
     id: "381170",
     name: "TIGER 미국테크TOP10 INDXX",
     yahooSymbol: "381170.KS",
-    eodhdSymbol: "381170.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   stocks: [
     {
       id: "NVDA",
       name: "NVIDIA Corporation",
       yahooSymbol: "NVDA",
-      eodhdSymbol: "NVDA.US",
       currency: "USD" as const,
+      market: "US" as const,
     },
     {
       id: "JNJ",
       name: "Johnson & Johnson",
       yahooSymbol: "JNJ",
-      eodhdSymbol: "JNJ.US",
       currency: "USD" as const,
+      market: "US" as const,
     },
     {
       id: "WMT",
       name: "Walmart Inc.",
       yahooSymbol: "WMT",
-      eodhdSymbol: "WMT.US",
       currency: "USD" as const,
+      market: "US" as const,
     },
     {
       id: "005380",
       name: "현대자동차(주)",
       yahooSymbol: "005380.KS",
-      eodhdSymbol: "005380.KO",
       currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
     },
     {
       id: "105560",
       name: "(주)KB금융지주",
       yahooSymbol: "105560.KS",
-      eodhdSymbol: "105560.KO",
       currency: "KRW" as const,
+      market: "KRX" as const,
+      krxDataset: "stock" as const,
     },
   ],
   government: {
     id: "114820",
     name: "TIGER 국채3년",
     yahooSymbol: "114820.KS",
-    eodhdSymbol: "114820.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   credit: {
     id: "273130",
     name: "KODEX 종합채권(AA-이상) 액티브",
     yahooSymbol: "273130.KS",
-    eodhdSymbol: "273130.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   alternative: {
     id: "132030",
     name: "KODEX 골드선물(H)",
     yahooSymbol: "132030.KS",
-    eodhdSymbol: "132030.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
   cash: {
     id: "488770",
     name: "KODEX 머니마켓액티브",
     yahooSymbol: "488770.KS",
-    eodhdSymbol: "488770.KO",
     currency: "KRW" as const,
+    market: "KRX" as const,
+    krxDataset: "etf" as const,
   },
 };
 
@@ -211,4 +221,3 @@ export function getBacktestAssets(
 
   return assets.filter((asset) => asset.weight > 0);
 }
-

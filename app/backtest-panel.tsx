@@ -10,6 +10,22 @@ type RateSource = {
   observations: number;
 };
 
+type BacktestMetrics = {
+  totalReturn: number;
+  cagr: number;
+  annualVolatility: number;
+  maximumDrawdown: number;
+  sharpe: number | null;
+  winningMonths: number;
+  endingValue: number;
+  totalTurnover: number;
+  annualizedTurnover: number;
+  cumulativeCost: number;
+  rebalances: number;
+};
+
+type CurvePoint = { date: string; value: number; drawdown: number };
+
 type BacktestSuccess = {
   status: "verified";
   generatedAt: string;
@@ -18,6 +34,20 @@ type BacktestSuccess = {
   validationScope: "current-holdings-fixed";
   providers: {
     prices: string;
+    usPrices: string;
+    koreanHistory: string;
+    koreanOfficialAudit: {
+      source: string;
+      date: string;
+      matched: number;
+      total: number;
+      maximumDifferencePercent: number;
+    };
+    fx: {
+      source: string;
+      series: string;
+      observations: number;
+    };
     koreanRiskFree: RateSource | null;
     usReferenceRate: RateSource | null;
   };
@@ -35,6 +65,7 @@ type BacktestSuccess = {
     ticker: string;
     name: string;
     weight: number;
+    provider: string;
     firstPriceDate: string;
     lastPriceDate: string;
     observations: number;
@@ -47,20 +78,19 @@ type BacktestSuccess = {
     years: number;
     observations: number;
   };
-  metrics: {
-    totalReturn: number;
-    cagr: number;
-    annualVolatility: number;
-    maximumDrawdown: number;
-    sharpe: number | null;
-    winningMonths: number;
-    endingValue: number;
-    totalTurnover: number;
-    annualizedTurnover: number;
-    cumulativeCost: number;
-    rebalances: number;
+  metrics: BacktestMetrics;
+  curve: CurvePoint[];
+  benchmark: {
+    ticker: string;
+    name: string;
+    metrics: BacktestMetrics;
+    curve: CurvePoint[];
   };
-  curve: Array<{ date: string; value: number; drawdown: number }>;
+  comparison: {
+    beatBenchmark: boolean;
+    excessTotalReturn: number;
+    excessCagr: number;
+  };
 };
 
 type BacktestFailure = {
@@ -91,11 +121,12 @@ const cadenceLabel = {
   quarterly: "분기",
 };
 
-function curvePolyline(curve: BacktestSuccess["curve"]) {
+function curvePolyline(
+  curve: BacktestSuccess["curve"],
+  minimum: number,
+  maximum: number,
+) {
   if (curve.length < 2) return "";
-  const values = curve.map((point) => point.value);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
   const range = Math.max(maximum - minimum, 0.0001);
   return curve
     .map((point, index) => {
@@ -119,9 +150,26 @@ export function BacktestPanel({
     setState({ kind: "idle" });
   }, [profileCode]);
 
-  const points = useMemo(
-    () =>
-      state.kind === "success" ? curvePolyline(state.data.curve) : "",
+  const chartLines = useMemo(
+    () => {
+      if (state.kind !== "success") {
+        return { portfolio: "", benchmark: "" };
+      }
+      const values = [
+        ...state.data.curve.map((point) => point.value),
+        ...state.data.benchmark.curve.map((point) => point.value),
+      ];
+      const minimum = Math.min(...values);
+      const maximum = Math.max(...values);
+      return {
+        portfolio: curvePolyline(state.data.curve, minimum, maximum),
+        benchmark: curvePolyline(
+          state.data.benchmark.curve,
+          minimum,
+          maximum,
+        ),
+      };
+    },
     [state],
   );
 
@@ -160,10 +208,10 @@ export function BacktestPanel({
       <div className="backtest-heading">
         <div>
           <span className="step-label">STEP 04 · BACKTEST</span>
-          <h2>가정치가 아닌, 실제 가격으로 검증</h2>
+          <h2>공식 데이터로 전체 포트폴리오 검증</h2>
           <p>
-            수정주가·배당·분할·원/달러 환율·리밸런싱 비용을 반영해
-            현재 {profileName} 편입안을 원화 기준으로 다시 계산합니다.
+            Massive·KRX·FRED·ECOS 자료로 배당·분할·환율·비용을 반영하고,
+            현재 {profileName} 전체 구성을 TIGER 미국S&amp;P500과 비교합니다.
           </p>
         </div>
         <button
@@ -189,10 +237,10 @@ export function BacktestPanel({
             기존 기대수익률 숫자는 백테스트 결과로 간주하지 않습니다.
           </p>
           <div>
-            <i>01</i> 수정주가 수집
-            <i>02</i> USD 자산 원화 환산
-            <i>03</i> 비용 반영
-            <i>04</i> 성과지표 계산
+            <i>01</i> Massive 미국 종가·배당
+            <i>02</i> KRX 최근 종가 대조
+            <i>03</i> FRED 환율·비용
+            <i>04</i> 벤치마크 비교
           </div>
         </div>
       )}
@@ -200,8 +248,8 @@ export function BacktestPanel({
       {state.kind === "loading" && (
         <div className="backtest-loading" role="status">
           <i />
-          <strong>전 종목의 공통 가격 구간을 맞추고 있습니다.</strong>
-          <span>미국·한국 휴장일은 직전 가격으로 정렬합니다.</span>
+          <strong>공식 데이터 출처를 확인하고 총수익률을 계산합니다.</strong>
+          <span>Massive 무료 호출 한도 때문에 첫 실행은 조금 걸릴 수 있습니다.</span>
         </div>
       )}
 
@@ -221,8 +269,8 @@ export function BacktestPanel({
           <div className="verification-bar">
             <div>
               <i />
-              <span>CALCULATED</span>
-              <strong>서버 계산 완료</strong>
+              <span>OFFICIAL SOURCES CHECKED</span>
+              <strong>KRX 최근 종가 대조 완료</strong>
             </div>
             <p>
               {state.data.period.start} — {state.data.period.end}
@@ -267,21 +315,68 @@ export function BacktestPanel({
             </article>
           </div>
 
+          <article
+            className={`benchmark-summary ${
+              state.data.comparison.beatBenchmark ? "win" : "loss"
+            }`}
+          >
+            <div>
+              <span>전체 포트폴리오 vs 단일 벤치마크</span>
+              <strong>
+                {state.data.comparison.beatBenchmark
+                  ? "벤치마크 상회"
+                  : "벤치마크 하회"}
+              </strong>
+              <small>
+                {state.data.benchmark.name} · {state.data.benchmark.ticker}
+              </small>
+            </div>
+            <dl>
+              <div>
+                <dt>포트폴리오 CAGR</dt>
+                <dd>{percent.format(state.data.metrics.cagr)}</dd>
+              </div>
+              <div>
+                <dt>벤치마크 CAGR</dt>
+                <dd>{percent.format(state.data.benchmark.metrics.cagr)}</dd>
+              </div>
+              <div>
+                <dt>초과 CAGR</dt>
+                <dd>{percent.format(state.data.comparison.excessCagr)}</dd>
+              </div>
+              <div>
+                <dt>누적 초과수익</dt>
+                <dd>{percent.format(state.data.comparison.excessTotalReturn)}</dd>
+              </div>
+            </dl>
+          </article>
+
           <div className="backtest-detail-grid">
             <article className="equity-curve-card">
               <div>
                 <span>KRW EQUITY CURVE</span>
-                <strong>누적 운용가치</strong>
+                <strong>전체 포트폴리오와 벤치마크</strong>
+              </div>
+              <div className="curve-legend" aria-hidden="true">
+                <span><i />{profileName} 포트폴리오</span>
+                <span><i />TIGER 미국S&amp;P500</span>
               </div>
               <svg
                 viewBox="0 0 800 220"
                 role="img"
-                aria-label={`${profileName} 백테스트 누적 운용가치 곡선`}
+                aria-label={`${profileName} 포트폴리오와 TIGER 미국S&P500 누적 운용가치 비교`}
               >
                 <line x1="20" y1="200" x2="780" y2="200" />
                 <line x1="20" y1="120" x2="780" y2="120" />
                 <line x1="20" y1="40" x2="780" y2="40" />
-                <polyline points={points} />
+                <polyline
+                  className="benchmark-line"
+                  points={chartLines.benchmark}
+                />
+                <polyline
+                  className="portfolio-line"
+                  points={chartLines.portfolio}
+                />
               </svg>
               <div className="curve-axis">
                 <span>{state.data.period.start}</span>
@@ -298,7 +393,18 @@ export function BacktestPanel({
               <dl>
                 <div>
                   <dt>가격 데이터</dt>
-                  <dd>{state.data.providers.prices}</dd>
+                  <dd>Massive + KRX 대조</dd>
+                </div>
+                <div>
+                  <dt>KRX 대조일</dt>
+                  <dd>
+                    {state.data.providers.koreanOfficialAudit.date} ·{" "}
+                    {state.data.providers.koreanOfficialAudit.matched}종목
+                  </dd>
+                </div>
+                <div>
+                  <dt>원/달러 환율</dt>
+                  <dd>FRED {state.data.providers.fx.series}</dd>
                 </div>
                 <div>
                   <dt>기준 통화</dt>
@@ -322,6 +428,8 @@ export function BacktestPanel({
                 </div>
               </dl>
               <div className="api-connections">
+                <span className="connected">Massive 연결됨</span>
+                <span className="connected">KRX 대조됨</span>
                 <span className={state.data.providers.koreanRiskFree ? "connected" : ""}>
                   ECOS {state.data.providers.koreanRiskFree ? "연결됨" : "미연결"}
                 </span>
@@ -345,4 +453,3 @@ export function BacktestPanel({
     </section>
   );
 }
-

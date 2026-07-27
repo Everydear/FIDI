@@ -1610,6 +1610,82 @@ footer {
   font-size: 8px;
 }
 
+.benchmark-summary {
+  align-items: center;
+  background: #f7f8fc;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 0.8fr 1.2fr;
+  padding: 22px 24px;
+}
+
+.benchmark-summary.win {
+  background: #effaf6;
+  border-color: #bfe8d9;
+}
+
+.benchmark-summary.loss {
+  background: #fff8f3;
+  border-color: #efd4c1;
+}
+
+.benchmark-summary > div {
+  display: grid;
+  gap: 5px;
+}
+
+.benchmark-summary span {
+  color: var(--ink-soft);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.benchmark-summary strong {
+  color: var(--navy);
+  font-size: 20px;
+}
+
+.benchmark-summary.win strong {
+  color: #087e5e;
+}
+
+.benchmark-summary.loss strong {
+  color: #b6542d;
+}
+
+.benchmark-summary small {
+  color: var(--ink-faint);
+  font-size: 8px;
+}
+
+.benchmark-summary dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+}
+
+.benchmark-summary dl > div {
+  border-left: 1px solid rgba(112, 120, 148, 0.2);
+  display: grid;
+  gap: 6px;
+  padding-left: 14px;
+}
+
+.benchmark-summary dt {
+  color: var(--ink-faint);
+  font-size: 8px;
+}
+
+.benchmark-summary dd {
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 850;
+  margin: 0;
+}
+
 .backtest-detail-grid {
   display: grid;
   gap: 14px;
@@ -1651,17 +1727,52 @@ footer {
   width: 100%;
 }
 
+.curve-legend {
+  display: flex !important;
+  gap: 16px !important;
+  margin-top: 14px;
+}
+
+.curve-legend span {
+  align-items: center;
+  color: var(--ink-soft) !important;
+  display: flex;
+  font-size: 8px !important;
+  gap: 6px;
+  letter-spacing: 0 !important;
+}
+
+.curve-legend i {
+  background: var(--primary);
+  border-radius: 999px;
+  height: 3px;
+  width: 18px;
+}
+
+.curve-legend span:last-child i {
+  background: #9aa2b8;
+}
+
 .equity-curve-card line {
   stroke: #eceef5;
   stroke-width: 1;
 }
 
-.equity-curve-card polyline {
+.equity-curve-card .portfolio-line {
   fill: none;
   stroke: var(--primary);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 4;
+}
+
+.equity-curve-card .benchmark-line {
+  fill: none;
+  stroke: #9aa2b8;
+  stroke-dasharray: 7 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
 }
 
 .curve-axis {
@@ -2423,6 +2534,10 @@ input:focus-visible {
   .backtest-detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .benchmark-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2473,6 +2588,14 @@ input:focus-visible {
 
   .backtest-metrics article {
     min-height: 125px;
+  }
+
+  .benchmark-summary {
+    padding: 20px;
+  }
+
+  .benchmark-summary dl {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .equity-curve-card,

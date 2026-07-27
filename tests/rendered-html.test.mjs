@@ -53,7 +53,9 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /대회형/);
   assert.match(html, /현재 모델 편입안/);
   assert.match(html, /실데이터 백테스트 실행/);
-  assert.match(html, /가정치가 아닌, 실제 가격으로 검증/);
+  assert.match(html, /공식 데이터로 전체 포트폴리오 검증/);
+  assert.match(html, /Massive 미국 종가·배당/);
+  assert.match(html, /벤치마크 비교/);
   assert.match(html, /정기 교체 검토/);
   assert.match(html, /FUNETF/);
   assert.match(html, /네이버 금융/);
