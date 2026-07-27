@@ -52,6 +52,8 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
   assert.match(html, /현재 투자 구성/);
+  assert.match(html, /클릭 한 번에 설계하세요/);
+  assert.doesNotMatch(html, /ETF에만 몰아넣지 않습니다/);
   assert.match(html, /오늘 가격으로 구성 확인/);
   assert.match(html, /오늘 구성 확인/);
   assert.match(html, /Massive 미국 종가·배당/);
@@ -86,7 +88,8 @@ test("includes responsive and accessible controls", async () => {
   assert.match(html, /매수·매도 주문을 대신하지 않습니다/);
   assert.match(html, /선택안 링크 복사/);
   assert.match(html, /목표 비중/);
-  assert.match(html, /종목은 데이터로 고릅니다/);
+  assert.match(html, /자산 비중은 투자 성향에 맞춰 정하고/);
+  assert.match(html, /종목은 최신 데이터로 고릅니다/);
   assert.doesNotMatch(html, /모델 편입 · 교체 대상/);
   assert.doesNotMatch(html, /자동 주문/);
   assert.doesNotMatch(html, /연 8~12%/);

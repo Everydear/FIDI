@@ -634,12 +634,11 @@ export default function Home() {
             <br />
             ETF·주식·채권을
             <br />
-            <em>한눈에 설계하세요.</em>
+            <em>클릭 한 번에 설계하세요.</em>
           </h1>
           <p>
-            ETF에만 몰아넣지 않습니다. 시장 ETF, 섹터별 대표주 5개,
-            채권, 대체자산, 현금을 투자자 유형에 맞춰 나누고 종목은
-            정해진 규칙으로 다시 고릅니다.
+            시장 ETF, 섹터별 대표주 5개, 채권, 대체자산, 현금을 투자자 유형에
+            맞춰 나누고 종목은 정해진 기준으로 다시 고릅니다.
           </p>
           <div className="hero-actions">
             <a className="primary-action" href="#profile">
@@ -1083,9 +1082,9 @@ export default function Home() {
         <div className="rules-intro">
           <span className="step-label">종목을 고르는 기준</span>
           <h2>
-            비중은 정책으로,
+            자산 비중은 투자 성향에 맞춰 정하고,
             <br />
-            <em>종목은 데이터로 고릅니다.</em>
+            <em>종목은 최신 데이터로 고릅니다.</em>
           </h2>
           <p>
             ETF와 주식을 한 번 정해두고 계속 보유하지 않습니다. 매일 같은
