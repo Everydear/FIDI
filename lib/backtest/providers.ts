@@ -12,6 +12,16 @@ export type DividendEvent = {
   splitAdjustedCashAmount: number;
 };
 
+export type LatestQuote = {
+  price: number;
+  previousClose: number | null;
+  change: number | null;
+  changePercent: number | null;
+  asOf: string;
+  source: string;
+  freshness: "latest-available-daily-bar";
+};
+
 export type KrxAudit = {
   source: "한국거래소 KRX Open API";
   date: string;
@@ -25,11 +35,15 @@ type CacheEntry<T> = { expiresAt: number; value: T };
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const memoryCache = new Map<string, CacheEntry<unknown>>();
 
-async function cached<T>(key: string, loader: () => Promise<T>): Promise<T> {
+async function cached<T>(
+  key: string,
+  loader: () => Promise<T>,
+  ttlMs = CACHE_TTL_MS,
+): Promise<T> {
   const current = memoryCache.get(key) as CacheEntry<T> | undefined;
   if (current && current.expiresAt > Date.now()) return current.value;
   const value = await loader();
-  memoryCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+  memoryCache.set(key, { expiresAt: Date.now() + ttlMs, value });
   return value;
 }
 
@@ -178,6 +192,137 @@ async function fetchMassiveBars(
     }
     return points;
   });
+}
+
+function recentUtcDate(offsetDays = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+export async function fetchMassiveLatestQuote(
+  ticker: string,
+  apiKey: string,
+): Promise<LatestQuote> {
+  return cached(
+    `massive-latest:${ticker}`,
+    async () => {
+      const end = recentUtcDate();
+      const start = recentUtcDate(-7);
+      const endpoint = new URL(
+        `https://api.massive.com/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${start}/${end}`,
+      );
+      endpoint.searchParams.set("adjusted", "true");
+      endpoint.searchParams.set("sort", "asc");
+      endpoint.searchParams.set("limit", "10");
+      endpoint.searchParams.set("apiKey", apiKey);
+
+      const response = await fetch(endpoint, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        status?: string;
+        error?: string;
+        message?: string;
+        results?: Array<{ t?: number; c?: number }>;
+      };
+      if (!response.ok || !Array.isArray(payload.results)) {
+        throw new Error(
+          `Massive 최신 종가 응답 오류 (${ticker}, ${response.status}): ${
+            payload.error ?? payload.message ?? payload.status ?? "unknown"
+          }`,
+        );
+      }
+      const points = payload.results.flatMap((row) => {
+        const value = safeNumber(row.c);
+        return row.t && value && value > 0
+          ? [{ date: utcDateFromUnixMilliseconds(row.t), value }]
+          : [];
+      });
+      const latest = points.at(-1);
+      const previous = points.at(-2);
+      if (!latest) throw new Error(`Massive 최신 종가가 없습니다 (${ticker})`);
+      const change = previous ? latest.value - previous.value : null;
+      return {
+        price: latest.value,
+        previousClose: previous?.value ?? null,
+        change,
+        changePercent:
+          change !== null && previous?.value
+            ? change / previous.value
+            : null,
+        asOf: latest.date,
+        source: "Massive 최신 일봉",
+        freshness: "latest-available-daily-bar",
+      };
+    },
+    5 * 60 * 1000,
+  );
+}
+
+export async function fetchYahooLatestQuote(
+  symbol: string,
+): Promise<LatestQuote> {
+  return cached(
+    `yahoo-latest:${symbol}`,
+    async () => {
+      const endpoint = new URL(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`,
+      );
+      endpoint.searchParams.set("range", "5d");
+      endpoint.searchParams.set("interval", "1d");
+      endpoint.searchParams.set("events", "div,splits");
+      endpoint.searchParams.set("includePrePost", "true");
+
+      const response = await fetch(endpoint, {
+        headers: { "User-Agent": "FIDI-Portfolio/4.1" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        throw new Error(`최신 국내 시세 응답 오류 (${symbol}, ${response.status})`);
+      }
+      const payload = (await response.json()) as {
+        chart?: {
+          error?: { description?: string } | null;
+          result?: Array<{
+            timestamp?: number[];
+            indicators?: {
+              quote?: Array<{ close?: Array<number | null> }>;
+            };
+          }>;
+        };
+      };
+      const result = payload.chart?.result?.[0];
+      if (!result || payload.chart?.error) {
+        throw new Error(`최신 국내 시세를 찾을 수 없습니다 (${symbol})`);
+      }
+      const timestamps = result.timestamp ?? [];
+      const closes = result.indicators?.quote?.[0]?.close ?? [];
+      const points = timestamps.flatMap((timestamp, index) => {
+        const value = safeNumber(closes[index]);
+        return value && value > 0
+          ? [{ date: utcDateFromUnixMilliseconds(timestamp * 1000), value }]
+          : [];
+      });
+      const latest = points.at(-1);
+      const previous = points.at(-2);
+      if (!latest) throw new Error(`최신 국내 시세가 없습니다 (${symbol})`);
+      const change = previous ? latest.value - previous.value : null;
+      return {
+        price: latest.value,
+        previousClose: previous?.value ?? null,
+        change,
+        changePercent:
+          change !== null && previous?.value
+            ? change / previous.value
+            : null,
+        asOf: latest.date,
+        source: "Yahoo 최신 일봉",
+        freshness: "latest-available-daily-bar",
+      };
+    },
+    5 * 60 * 1000,
+  );
 }
 
 export async function fetchMassiveDividendEvents(

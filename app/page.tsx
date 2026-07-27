@@ -54,6 +54,17 @@ type Holding = {
   dynamic?: boolean;
 };
 
+type QuoteState = {
+  status: "connected" | "partial" | "unavailable";
+  summary: {
+    total: number;
+    connected: number;
+    unavailable: number;
+    asOf: string | null;
+  };
+  notice: string;
+};
+
 const COLORS: Record<AllocationId, string> = {
   market: "#635bff",
   strategy: "#8d84ff",
@@ -259,6 +270,35 @@ function useLatestKoreaDate() {
   }, []);
 
   return label;
+}
+
+function useLatestQuotes(profileCode: ProfileCode) {
+  const [quoteState, setQuoteState] = useState<QuoteState | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/quotes?profile=${encodeURIComponent(profileCode)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("quote request failed");
+        return (await response.json()) as QuoteState;
+      })
+      .then((payload) => setQuoteState(payload))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setQuoteState(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setQuoteLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [profileCode]);
+
+  return { quoteState, quoteLoading };
 }
 
 const filterOptions: HoldingFilter[] = [
@@ -486,6 +526,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [shareStatus, setShareStatus] = useState("");
   const holdingsAsOf = useLatestKoreaDate();
+  const { quoteState, quoteLoading } = useLatestQuotes(profileCode);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -874,8 +915,8 @@ export default function Home() {
           </div>
           <p>
             실제 거래 가능한 공식 상품명과 티커를 표시합니다. 현재
-            버전은 규칙 기반 모델안이며 실시간 시세와 주문은 연결되지
-            않았습니다.
+            버전은 규칙 기반 모델안이며 최신 가격은 페이지 진입 시
+            자동 조회합니다. 주문 기능은 제공하지 않습니다.
           </p>
         </div>
 
@@ -890,17 +931,27 @@ export default function Home() {
             <strong>{lineupVerifiedAsOf}</strong>
             <small>상품명·티커 확인</small>
           </div>
-          <div className="pending">
-            <span>실시간 시세</span>
-            <strong>미연동</strong>
-            <small>주문 전 별도 확인</small>
-          </div>
-          <div className="pending">
-            <span>자동 주문</span>
-            <strong>미연동</strong>
-            <small>전략 설계 전용</small>
+          <div className="quote-status">
+            <span>최신 시세</span>
+            <strong>
+              {quoteLoading
+                ? "조회 중…"
+                : quoteState
+                  ? `${quoteState.summary.connected}/${quoteState.summary.total} 연결`
+                  : "조회 실패"}
+            </strong>
+            <small>
+              {quoteState?.summary.asOf
+                ? `${quoteState.summary.asOf} 최신 일봉`
+                : "페이지 진입 시 자동 조회"}
+            </small>
           </div>
         </div>
+
+        <p className="quote-data-note">
+          {quoteState?.notice ??
+            "가격 제공 범위를 확인하는 중입니다. 현재 화면은 주문 기능 없이 가격 정보만 표시합니다."}
+        </p>
 
         <div className="holdings-toolbar">
           <label className="search-box">
@@ -1043,14 +1094,10 @@ export default function Home() {
             매일 같은 기준으로 후보를 다시 평가하고, 점수 우위와
             거래비용을 함께 본 뒤 교체 여부를 안내합니다.
           </p>
-          <div className="model-phase" aria-label="자동화 진행 상태">
+          <div className="model-phase" aria-label="운용 진행 상태">
             <div>
               <span>현재 V4.1</span>
               <strong>매일 후보 점수 · 교체 비교 · 주문 가이드</strong>
-            </div>
-            <div>
-              <span>ORDER MODE</span>
-              <strong>수량·가격 확인 후 사용자 승인</strong>
             </div>
           </div>
           <div className="source-list">

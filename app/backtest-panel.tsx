@@ -91,6 +91,8 @@ type BacktestSuccess = {
       source: string;
       series: string;
       observations: number;
+      latestDate: string | null;
+      latestRate: number | null;
     };
     koreanRiskFree: RateSource | null;
     usReferenceRate: RateSource | null;
@@ -99,7 +101,6 @@ type BacktestSuccess = {
     rebalance: "weekly" | "monthly" | "quarterly";
     lockedRebalance: "weekly" | "monthly" | "quarterly";
     dailyEvaluation: boolean;
-    orderMode: "manual-approval";
     transactionCostBps: number;
     riskFreeRatePercent: number;
     adjustedClose: boolean;
@@ -151,7 +152,6 @@ type BacktestSuccess = {
     asOf: string;
     profile: string;
     evaluationCadence: "daily";
-    orderMode: "manual-approval";
     switchThreshold: number;
     transactionCostBps: number;
     headline: string;
@@ -381,7 +381,7 @@ export function BacktestPanel({
           <p>
             매일 최신 가격으로 ETF와 섹터별 후보를 다시 점수화합니다.
             현재 {profileName} 구성을 유지할지, 교체 후보를 비교할지와
-            주문 전 확인 순서를 함께 보여줍니다.
+            실행 전 확인 순서를 함께 보여줍니다.
           </p>
         </div>
         <button
@@ -459,7 +459,7 @@ export function BacktestPanel({
                 <p>
                   매일 평가 · 교체 우위{" "}
                   {percent.format(state.data.dailyGuide.switchThreshold)} 이상
-                  비교 · 최종 주문은 사용자 승인
+                  비교 · 최종 실행은 사용자 직접 결정
                 </p>
               </div>
               <div className="daily-guide-summary">
@@ -790,7 +790,11 @@ export function BacktestPanel({
                 </div>
                 <div>
                   <dt>원/달러 환율</dt>
-                  <dd>FRED {state.data.providers.fx.series}</dd>
+                  <dd>
+                    {state.data.providers.fx.latestRate === null
+                      ? "확인 필요"
+                      : `${number.format(state.data.providers.fx.latestRate)}원 · ${state.data.providers.fx.latestDate ?? "최근일"}`}
+                  </dd>
                 </div>
                 <div>
                   <dt>기준 통화</dt>

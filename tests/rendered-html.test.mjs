@@ -82,11 +82,12 @@ test("includes responsive and accessible controls", async () => {
   assert.match(html, /최신 편입 기준일/);
   assert.match(html, new RegExp(latestKoreaDateLabel().replaceAll(".", "\\.")));
   assert.match(html, /라인업 검증일/);
-  assert.match(html, /실시간 시세/);
-  assert.match(html, /미연동/);
+  assert.match(html, /최신 시세/);
+  assert.match(html, /주문 기능은 제공하지 않습니다/);
   assert.match(html, /선택안 링크 복사/);
   assert.match(html, /목표 자산배분/);
   assert.match(html, /종목은 데이터로/);
   assert.doesNotMatch(html, /모델 편입 · 교체 대상/);
+  assert.doesNotMatch(html, /자동 주문/);
   assert.doesNotMatch(html, /연 8~12%/);
 });

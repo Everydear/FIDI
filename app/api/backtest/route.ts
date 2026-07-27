@@ -371,7 +371,7 @@ export async function GET(request: Request) {
       "현재 화면의 고정 편입 종목을 과거에도 보유했다고 가정한 검증입니다. 과거 시점의 종목 선정 규칙 자체를 검증한 결과는 아닙니다.",
       "미국 가격은 Massive SIP 종가와 배당·분할 자료로 총수익률을 재구성했습니다. 국내 전체 이력은 수정주가를 사용하고 최근 종가는 KRX Open API와 교차 대조했습니다.",
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
-      "일일 가이드는 자동 주문이 아닙니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인하고 사용자가 최종 결정합니다.",
+      "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
     ];
     if (requestedStart < minimumStart) {
       warnings.push(
@@ -399,6 +399,8 @@ export async function GET(request: Request) {
           source: "FRED",
           series: "DEXKOUS",
           observations: fxRates.length,
+          latestDate: fxRates.at(-1)?.date ?? null,
+          latestRate: fxRates.at(-1)?.value ?? null,
         },
         koreanRiskFree: ecosRateResult
           ? { source: "한국은행 ECOS", ...ecosRateResult }
@@ -414,7 +416,6 @@ export async function GET(request: Request) {
         rebalance: cadence,
         lockedRebalance: lockedCadence,
         dailyEvaluation: true,
-        orderMode: "manual-approval",
         transactionCostBps,
         initialPurchaseCost: "포트폴리오와 벤치마크 모두 제외",
         riskFreeRatePercent: annualRiskFreeRate * 100,

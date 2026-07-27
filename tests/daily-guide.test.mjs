@@ -56,7 +56,6 @@ test("compares candidates daily and only flags a material score advantage", () =
   });
 
   assert.equal(guide.evaluationCadence, "daily");
-  assert.equal(guide.orderMode, "manual-approval");
   assert.equal(guide.switchThreshold, 0.03);
   assert.equal(guide.summary.reviewChange, 1);
   assert.equal(guide.groups[0].action, "REVIEW_CHANGE");

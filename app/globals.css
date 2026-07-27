@@ -969,7 +969,7 @@ footer {
   border-radius: 18px;
   display: grid;
   gap: 1px;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   margin-bottom: 18px;
   overflow: hidden;
 }
@@ -1006,9 +1006,23 @@ footer {
   font-weight: 750;
 }
 
-.data-status-panel .pending strong,
-.data-status-panel .pending small {
-  color: #a56a00;
+.quote-status strong {
+  color: var(--primary);
+}
+
+.quote-status small {
+  color: var(--green);
+}
+
+.quote-data-note {
+  background: #f4f5fa;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.55;
+  margin: -5px 3px 18px;
+  padding: 10px 12px;
 }
 
 .holdings-toolbar {
@@ -2741,10 +2755,6 @@ input:focus-visible {
     border-top: 1px solid #e2e0f6;
   }
 
-  .data-status-panel > div:nth-child(4) {
-    border-top: 1px solid #e2e0f6;
-  }
-
   .amount-toolbar {
     grid-template-columns: 1fr;
   }
@@ -2972,8 +2982,7 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .data-status-panel > div + div,
-  .data-status-panel > div:nth-child(3) {
+  .data-status-panel > div + div {
     border-left: 0;
     border-top: 1px solid #e2e0f6;
   }
