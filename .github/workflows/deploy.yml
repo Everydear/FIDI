@@ -1,0 +1,71 @@
+name: Deploy FIDI to Cloudflare Workers
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build, verify, and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ECOS_KEY: ${{ secrets.ECOS_KEY }}
+      FRED_KEY: ${{ secrets.FRED_KEY }}
+      MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+      KRX_AUTH_KEY: ${{ secrets.KRX_AUTH_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          missing=()
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ECOS_KEY FRED_KEY MASSIVE_API_KEY KRX_AUTH_KEY; do
+            if [ -z "${!key}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing GitHub Actions secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Build and test
+        run: pnpm test
+
+      - name: Update runtime secrets
+        shell: bash
+        run: |
+          printf '%s' "$ECOS_KEY" | pnpm exec wrangler secret put ECOS_KEY --config dist/server/wrangler.json
+          printf '%s' "$FRED_KEY" | pnpm exec wrangler secret put FRED_KEY --config dist/server/wrangler.json
+          printf '%s' "$MASSIVE_API_KEY" | pnpm exec wrangler secret put MASSIVE_API_KEY --config dist/server/wrangler.json
+          printf '%s' "$KRX_AUTH_KEY" | pnpm exec wrangler secret put KRX_AUTH_KEY --config dist/server/wrangler.json
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config dist/server/wrangler.json
