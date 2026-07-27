@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+function latestKoreaDateLabel(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}.${parts.month}.${parts.day}`;
+}
+
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -36,9 +51,16 @@ test("server-renders the FIDI portfolio dashboard", async () => {
   assert.match(html, /투자자 유형/);
   assert.match(html, /중위험형/);
   assert.match(html, /대회형/);
-  assert.match(html, /포트폴리오/);
+  assert.match(html, /현재 실제 편입 상품/);
   assert.match(html, /FUNETF/);
-  assert.match(html, /네이버금융/);
+  assert.match(html, /네이버 금융/);
+  assert.match(html, /TIGER 미국S&amp;P500/);
+  assert.match(html, /TIGER 미국나스닥100/);
+  assert.match(html, /NVIDIA Corporation/);
+  assert.match(html, /현대자동차\(주\)/);
+  assert.match(html, /KODEX 종합채권\(AA-이상\) 액티브/);
+  assert.match(html, /KODEX 머니마켓액티브/);
+  assert.doesNotMatch(html, /ETF-RANK|CORE-01|STOCK-01|KR GOV 3Y/);
   assert.doesNotMatch(html, /codex-preview/);
   assert.doesNotMatch(html, /react-loading-skeleton/);
 });
@@ -48,7 +70,12 @@ test("includes responsive and accessible controls", async () => {
   const html = await response.text();
   assert.match(html, /aria-pressed/);
   assert.match(html, /type="range"/);
+  assert.match(html, /type="search"/);
   assert.match(html, /lang="ko"/);
-  assert.match(html, /현재 편입 구조/);
-  assert.match(html, /교체도 규칙대로/);
+  assert.match(html, /현재 실제 편입 상품/);
+  assert.match(html, /최신 편입 기준일/);
+  assert.match(html, new RegExp(latestKoreaDateLabel().replaceAll(".", "\\.")));
+  assert.match(html, /기준일은\s*매일 자동으로 갱신됩니다/);
+  assert.match(html, /목표 자산배분/);
+  assert.match(html, /종목은 데이터로/);
 });

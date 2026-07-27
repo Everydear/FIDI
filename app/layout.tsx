@@ -14,18 +14,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
 
   return {
-    title: "FIDI | KRW Dynamic V4",
+    title: "FIDI | 투자자 유형별 KRW 포트폴리오",
     description:
-      "투자자 유형을 선택하고 자산배분, 편입종목, 동적 교체규칙을 한눈에 확인하는 FIDI 포트폴리오 대시보드",
+      "투자자 유형을 선택하고 ETF, 섹터 대표주 5종, 채권, 대체자산, 현금을 원화 기준으로 설계하는 FIDI 포트폴리오 대시보드",
     openGraph: {
       title: "FIDI · KRW Dynamic V4",
-      description: "투자자 유형에서 포트폴리오까지",
+      description: "투자자 유형에서 실제 편입종목까지 한 화면에서",
       type: "website",
       images: [
         {
-          url: `${origin}/og.png`,
-          width: 1200,
-          height: 630,
+          url: `${origin}/og-v2.png`,
+          width: 1731,
+          height: 909,
           alt: "FIDI KRW Dynamic V4 포트폴리오 대시보드",
         },
       ],
@@ -33,8 +33,8 @@ export async function generateMetadata(): Promise<Metadata> {
     twitter: {
       card: "summary_large_image",
       title: "FIDI · KRW Dynamic V4",
-      description: "투자자 유형에서 포트폴리오까지",
-      images: [`${origin}/og.png`],
+      description: "투자자 유형에서 실제 편입종목까지 한 화면에서",
+      images: [`${origin}/og-v2.png`],
     },
   };
 }

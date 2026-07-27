@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  useMemo,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 type ProfileCode =
   | "CONSERVATIVE"
@@ -15,12 +11,15 @@ type ProfileCode =
 
 type AllocationId =
   | "market"
-  | "factor"
+  | "strategy"
   | "stocks"
   | "government"
   | "credit"
-  | "gold"
+  | "alternative"
   | "cash";
+
+type HoldingKind = "ETF" | "개별주식" | "채권" | "대체자산" | "현금";
+type HoldingFilter = "전체" | HoldingKind;
 
 type Allocation = {
   id: AllocationId;
@@ -32,13 +31,14 @@ type Allocation = {
 type Profile = {
   code: ProfileCode;
   name: string;
+  shortName: string;
   description: string;
   riskLevel: number;
   cadence: string;
   nextReview: string;
+  referenceReturn: string;
+  referenceDrawdown: string;
   allocations: Allocation[];
-  cagr: string;
-  drawdown: string;
 };
 
 type Holding = {
@@ -46,28 +46,33 @@ type Holding = {
   name: string;
   role: string;
   percent: number;
-  kind: "ETF" | "주식" | "채권" | "대체" | "현금";
-  pending?: boolean;
+  kind: HoldingKind;
+  sector: string;
+  market: string;
+  vehicle: string;
+  rotation: string;
+  sourceUrl: string;
+  dynamic?: boolean;
 };
 
 const COLORS: Record<AllocationId, string> = {
-  market: "#2f7d79",
-  factor: "#5368c7",
-  stocks: "#e46f5a",
-  government: "#75a6c8",
-  credit: "#9a84b6",
-  gold: "#d7a33d",
-  cash: "#b9c0c6",
+  market: "#635bff",
+  strategy: "#8d84ff",
+  stocks: "#17a67a",
+  government: "#3b82f6",
+  credit: "#6db6ff",
+  alternative: "#f5a524",
+  cash: "#b7bfd1",
 };
 
-const allocationLabels: Record<AllocationId, string> = {
-  market: "시장 ETF",
-  factor: "전술·팩터 ETF",
-  stocks: "개별주 5종목",
+const ALLOCATION_LABELS: Record<AllocationId, string> = {
+  market: "시장대표 ETF",
+  strategy: "전략·섹터 ETF",
+  stocks: "섹터 대표주 5종",
   government: "국채",
   credit: "우량 회사채",
-  gold: "금",
-  cash: "원화 현금성",
+  alternative: "대체자산",
+  cash: "현금성자산",
 };
 
 const buildAllocations = (
@@ -75,7 +80,7 @@ const buildAllocations = (
 ): Allocation[] =>
   (Object.keys(values) as AllocationId[]).map((id) => ({
     id,
-    label: allocationLabels[id],
+    label: ALLOCATION_LABELS[id],
     percent: values[id],
     color: COLORS[id],
   }));
@@ -84,134 +89,194 @@ const profiles: Profile[] = [
   {
     code: "CONSERVATIVE",
     name: "안정형",
-    description: "낙폭 방어와 현금흐름을 우선합니다.",
+    shortName: "원금 방어",
+    description: "채권과 현금 중심으로 변동성을 낮추는 구성",
     riskLevel: 1,
     cadence: "분기",
     nextReview: "2026.10.30",
-    cagr: "6.94%",
-    drawdown: "-9.63%",
+    referenceReturn: "연 4~7%",
+    referenceDrawdown: "-8% 내외",
     allocations: buildAllocations({
-      market: 15,
-      factor: 3,
-      stocks: 2,
-      government: 45.5,
-      credit: 19.5,
-      gold: 5,
+      market: 10,
+      strategy: 5,
+      stocks: 5,
+      government: 45,
+      credit: 20,
+      alternative: 5,
       cash: 10,
     }),
   },
   {
     code: "MODERATE_CONSERVATIVE",
     name: "안정추구형",
-    description: "채권 중심에 성장 노출을 더합니다.",
+    shortName: "방어 + 수익",
+    description: "채권을 중심으로 주식의 성장성을 더한 구성",
     riskLevel: 2,
     cadence: "분기",
     nextReview: "2026.10.30",
-    cagr: "9.17%",
-    drawdown: "-10.24%",
+    referenceReturn: "연 6~9%",
+    referenceDrawdown: "-12% 내외",
     allocations: buildAllocations({
-      market: 25,
-      factor: 7,
-      stocks: 3,
-      government: 38.5,
-      credit: 16.5,
-      gold: 5,
-      cash: 5,
+      market: 20,
+      strategy: 10,
+      stocks: 10,
+      government: 30,
+      credit: 15,
+      alternative: 5,
+      cash: 10,
     }),
   },
   {
     code: "MODERATE",
     name: "중위험형",
-    description: "성장과 방어를 균형 있게 배분합니다.",
+    shortName: "균형 운용",
+    description: "성장자산과 방어자산을 균형 있게 배분",
     riskLevel: 3,
     cadence: "분기",
     nextReview: "2026.10.30",
-    cagr: "11.59%",
-    drawdown: "-14.63%",
+    referenceReturn: "연 8~12%",
+    referenceDrawdown: "-16% 내외",
     allocations: buildAllocations({
-      market: 35,
-      factor: 10,
-      stocks: 5,
-      government: 28,
-      credit: 12,
-      gold: 7,
-      cash: 3,
+      market: 25,
+      strategy: 15,
+      stocks: 20,
+      government: 20,
+      credit: 10,
+      alternative: 5,
+      cash: 5,
     }),
   },
   {
     code: "GROWTH",
     name: "성장형",
-    description: "장기 성장과 주식 위험예산을 확대합니다.",
+    shortName: "자본 성장",
+    description: "ETF와 섹터 대표주 비중을 높인 장기 성장 구성",
     riskLevel: 4,
-    cadence: "분기",
-    nextReview: "2026.10.30",
-    cagr: "14.27%",
-    drawdown: "-20.82%",
+    cadence: "월간 점검 · 분기 교체",
+    nextReview: "2026.08.31",
+    referenceReturn: "연 10~15%",
+    referenceDrawdown: "-23% 내외",
     allocations: buildAllocations({
-      market: 50,
-      factor: 15,
-      stocks: 5,
-      government: 14,
-      credit: 6,
-      gold: 7,
-      cash: 3,
+      market: 30,
+      strategy: 20,
+      stocks: 30,
+      government: 10,
+      credit: 5,
+      alternative: 3,
+      cash: 2,
     }),
   },
   {
     code: "CONTEST",
     name: "대회형",
-    description: "단기 순위 경쟁을 위한 별도 고위험 프로필입니다.",
+    shortName: "순위 경쟁",
+    description: "주간 교체와 손실 제한을 적용하는 별도 고위험 구성",
     riskLevel: 5,
     cadence: "주간",
-    nextReview: "대회 규정 입력 후",
-    cagr: "집계 전",
-    drawdown: "-10% 중단",
+    nextReview: "매주 금요일",
+    referenceReturn: "대회 중 집계",
+    referenceDrawdown: "-10% 중단선",
     allocations: buildAllocations({
       market: 10,
-      factor: 30,
+      strategy: 30,
       stocks: 50,
       government: 0,
       credit: 0,
-      gold: 0,
+      alternative: 0,
       cash: 10,
     }),
   },
 ];
 
-const stockTemplates = [
+const stockLeaders = [
   {
     ticker: "NVDA",
-    name: "NVIDIA",
-    role: "AI·반도체 성장",
+    name: "NVIDIA Corporation",
+    sector: "AI·반도체",
+    role: "성장 섹터 대표",
+    market: "Nasdaq",
+    vehicle: "미국 보통주",
+    sourceUrl:
+      "https://investor.nvidia.com/investor-resources/faqs/default.aspx",
   },
   {
     ticker: "JNJ",
     name: "Johnson & Johnson",
-    role: "방어적 헬스케어",
+    sector: "헬스케어",
+    role: "방어 섹터 대표",
+    market: "NYSE",
+    vehicle: "미국 보통주",
+    sourceUrl:
+      "https://www.investor.jnj.com/stock-info/default.aspx",
   },
   {
     ticker: "WMT",
-    name: "Walmart",
-    role: "필수소비재",
+    name: "Walmart Inc.",
+    sector: "필수소비재",
+    role: "경기 방어 대표",
+    market: "Nasdaq",
+    vehicle: "미국 보통주",
+    sourceUrl: "https://stock.walmart.com/",
   },
   {
     ticker: "005380",
-    name: "현대차",
-    role: "산업·경기민감",
+    name: "현대자동차(주)",
+    sector: "산업재·모빌리티",
+    role: "국내 산업 대표",
+    market: "KRX",
+    vehicle: "국내 보통주",
+    sourceUrl:
+      "https://kind.krx.co.kr/common/companysummary.do?method=searchCompanySummary&strIsurCd=00538",
   },
   {
     ticker: "105560",
-    name: "KB금융",
-    role: "금융",
+    name: "(주)KB금융지주",
+    sector: "금융",
+    role: "국내 금융 대표",
+    market: "KRX",
+    vehicle: "국내 보통주",
+    sourceUrl:
+      "https://kind.krx.co.kr/common/companysummary.do?method=searchCompanySummary&strIsurCd=10556",
   },
 ];
 
-const contestStockSlots = [
-  "섹터 리더 01",
-  "섹터 리더 02",
-  "섹터 리더 03",
-  "섹터 리더 04",
-  "섹터 리더 05",
+const koreaDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function latestKoreaDateLabel(date = new Date()) {
+  const parts = Object.fromEntries(
+    koreaDateFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}.${parts.month}.${parts.day}`;
+}
+
+function useLatestKoreaDate() {
+  const [label, setLabel] = useState(() => latestKoreaDateLabel());
+
+  useEffect(() => {
+    const refresh = () => setLabel(latestKoreaDateLabel());
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return label;
+}
+
+const filterOptions: HoldingFilter[] = [
+  "전체",
+  "ETF",
+  "개별주식",
+  "채권",
+  "대체자산",
+  "현금",
 ];
 
 const krw = new Intl.NumberFormat("ko-KR", {
@@ -220,8 +285,18 @@ const krw = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
-function getHoldings(profile: Profile): Holding[] {
-  const value = Object.fromEntries(
+function amountLabel(amount: number) {
+  if (amount >= 100_000_000 && amount % 100_000_000 === 0) {
+    return `${amount / 100_000_000}억원`;
+  }
+  if (amount >= 10_000_000 && amount % 10_000_000 === 0) {
+    return `${amount / 10_000_000}천만원`;
+  }
+  return krw.format(amount);
+}
+
+function buildHoldings(profile: Profile): Holding[] {
+  const weight = Object.fromEntries(
     profile.allocations.map((allocation) => [
       allocation.id,
       allocation.percent,
@@ -231,105 +306,171 @@ function getHoldings(profile: Profile): Holding[] {
   if (profile.code === "CONTEST") {
     return [
       {
-        ticker: "AUTO-CORE",
-        name: "시장 ETF 1개",
-        role: "대회 허용시장 내 동적 선정",
-        percent: value.market,
+        ticker: "360750",
+        name: "TIGER 미국S&P500",
+        role: "시장대표 코어 ETF",
+        percent: weight.market,
         kind: "ETF",
-        pending: true,
+        sector: "시장대표",
+        market: "KRX",
+        vehicle: "해외주식형 ETF",
+        rotation: "주간",
+        sourceUrl:
+          "https://www.tigeretf.com/upload/etf/20250708095909002749.pdf",
+        dynamic: true,
       },
       {
-        ticker: "AUTO-ETF 01",
-        name: "전술 ETF",
-        role: "주간 점수 상위",
-        percent: value.factor / 2,
+        ticker: "133690",
+        name: "TIGER 미국나스닥100",
+        role: "대형 성장주 모멘텀",
+        percent: weight.strategy / 2,
         kind: "ETF",
-        pending: true,
+        sector: "미국 성장주",
+        market: "KRX",
+        vehicle: "해외주식형 ETF",
+        rotation: "주간",
+        sourceUrl:
+          "https://www.tigeretf.com/upload/etf/20241007062827005440.pdf",
+        dynamic: true,
       },
       {
-        ticker: "AUTO-ETF 02",
-        name: "전술 ETF",
-        role: "주간 점수 상위",
-        percent: value.factor / 2,
+        ticker: "381170",
+        name: "TIGER 미국테크TOP10 INDXX",
+        role: "미국 빅테크 집중 전략",
+        percent: weight.strategy / 2,
         kind: "ETF",
-        pending: true,
+        sector: "미국 테크",
+        market: "KRX",
+        vehicle: "해외주식형 ETF",
+        rotation: "주간",
+        sourceUrl:
+          "https://www.tigeretf.com/upload/etf/20240509105027005590.pdf",
+        dynamic: true,
       },
-      ...contestStockSlots.map((name, index) => ({
-        ticker: `AUTO-${String(index + 1).padStart(2, "0")}`,
-        name,
-        role: "서로 다른 섹터에서 선정",
-        percent: value.stocks / 5,
-        kind: "주식" as const,
-        pending: true,
+      ...stockLeaders.map((stock) => ({
+        ...stock,
+        percent: weight.stocks / stockLeaders.length,
+        kind: "개별주식" as const,
+        rotation: "주간",
+        dynamic: true,
       })),
       {
-        ticker: "KRW CASH",
-        name: "원화 현금성 자산",
-        role: "손실 통제·기회 대기",
-        percent: value.cash,
+        ticker: "488770",
+        name: "KODEX 머니마켓액티브",
+        role: "손실 통제 및 투자 대기자금",
+        percent: weight.cash,
         kind: "현금",
+        sector: "현금성",
+        market: "KRX",
+        vehicle: "머니마켓 ETF",
+        rotation: "상시",
+        sourceUrl:
+          "https://www.samsungfund.com/etf/product/view.do?id=2ETFO1",
       },
     ];
   }
 
   const holdings: Holding[] = [
     {
-      ticker: "ITOT",
-      name: "iShares Core S&P Total U.S. Stock Market ETF",
-      role: "미국 전체시장",
-      percent: value.market,
+      ticker: "360750",
+      name: "TIGER 미국S&P500",
+      role: "장기 시장수익률의 중심축",
+      percent: weight.market,
       kind: "ETF",
+      sector: "시장대표",
+      market: "KRX",
+      vehicle: "해외주식형 ETF",
+      rotation: "연 1회 검토",
+      sourceUrl:
+        "https://www.tigeretf.com/upload/etf/20250708095909002749.pdf",
     },
     {
-      ticker: "MTUM",
-      name: "iShares MSCI USA Momentum Factor ETF",
-      role: "정적 모멘텀 팩터",
-      percent: value.factor,
+      ticker: "133690",
+      name: "TIGER 미국나스닥100",
+      role: "현재 전략 ETF 1순위",
+      percent: weight.strategy,
       kind: "ETF",
+      sector: "미국 성장주",
+      market: "KRX",
+      vehicle: "해외주식형 ETF",
+      rotation: profile.code === "GROWTH" ? "월간 점검" : "분기",
+      sourceUrl:
+        "https://www.tigeretf.com/upload/etf/20241007062827005440.pdf",
+      dynamic: true,
     },
-    ...stockTemplates.map((stock) => ({
+    ...stockLeaders.map((stock) => ({
       ...stock,
-      percent: value.stocks / stockTemplates.length,
-      kind: "주식" as const,
+      percent: weight.stocks / stockLeaders.length,
+      kind: "개별주식" as const,
+      rotation: profile.code === "GROWTH" ? "월간 점검" : "분기",
+      dynamic: true,
     })),
   ];
 
-  if (value.government > 0) {
+  if (weight.government > 0) {
     holdings.push({
-      ticker: "IEF",
-      name: "미국 중기 국채 프록시",
-      role: "국채 슬리브",
-      percent: value.government,
+      ticker: "114820",
+      name: "TIGER 국채3년",
+      role: "국고채 3년 구간 변동성 완충",
+      percent: weight.government,
       kind: "채권",
+      sector: "국채 ETF",
+      market: "KRX",
+      vehicle: "국내채권형 ETF",
+      rotation: "분기",
+      sourceUrl:
+        "https://www.tigeretf.com/upload/etf/20250708095820005220.pdf",
     });
   }
-  if (value.credit > 0) {
+
+  if (weight.credit > 0) {
     holdings.push({
-      ticker: "IGIB",
-      name: "우량 회사채 프록시",
-      role: "투자등급 신용",
-      percent: value.credit,
+      ticker: "273130",
+      name: "KODEX 종합채권(AA-이상) 액티브",
+      role: "AA- 이상 우량채권 이자수익",
+      percent: weight.credit,
       kind: "채권",
+      sector: "종합채권 ETF",
+      market: "KRX",
+      vehicle: "국내채권형 ETF",
+      rotation: "분기",
+      sourceUrl:
+        "https://www.samsungfund.com/etf/product/view.do?id=2ETF88",
     });
   }
-  if (value.gold > 0) {
+
+  if (weight.alternative > 0) {
     holdings.push({
-      ticker: "IAU",
-      name: "iShares Gold Trust",
-      role: "금·위기 분산",
-      percent: value.gold,
-      kind: "대체",
+      ticker: "132030",
+      name: "KODEX 골드선물(H)",
+      role: "환헤지 금 선물 분산",
+      percent: weight.alternative,
+      kind: "대체자산",
+      sector: "금 선물 ETF",
+      market: "KRX",
+      vehicle: "원자재 ETF",
+      rotation: "분기",
+      sourceUrl:
+        "https://www.samsungfund.com/etf/product/view.do?id=2ETF24",
     });
   }
-  if (value.cash > 0) {
+
+  if (weight.cash > 0) {
     holdings.push({
-      ticker: "KRW CASH",
-      name: "원화 3개월 현금성 지수",
-      role: "유동성·안전자산",
-      percent: value.cash,
+      ticker: "488770",
+      name: "KODEX 머니마켓액티브",
+      role: "유동성과 리밸런싱 대기자금",
+      percent: weight.cash,
       kind: "현금",
+      sector: "현금성",
+      market: "KRX",
+      vehicle: "머니마켓 ETF",
+      rotation: "상시",
+      sourceUrl:
+        "https://www.samsungfund.com/etf/product/view.do?id=2ETFO1",
     });
   }
+
   return holdings;
 }
 
@@ -345,27 +486,46 @@ function createDonut(allocations: Allocation[]) {
   return `conic-gradient(${segments.join(", ")})`;
 }
 
-function amountLabel(amount: number) {
-  if (amount >= 100_000_000 && amount % 100_000_000 === 0) {
-    return `${amount / 100_000_000}억원`;
-  }
-  if (amount >= 10_000_000 && amount % 10_000_000 === 0) {
-    return `${amount / 10_000_000}천만원`;
-  }
-  return krw.format(amount);
-}
-
 export default function Home() {
   const [profileCode, setProfileCode] =
     useState<ProfileCode>("MODERATE");
   const [amount, setAmount] = useState(100_000_000);
+  const [holdingFilter, setHoldingFilter] =
+    useState<HoldingFilter>("전체");
+  const [query, setQuery] = useState("");
+  const holdingsAsOf = useLatestKoreaDate();
+
   const profile = profiles.find(
     (candidate) => candidate.code === profileCode,
   )!;
-  const holdings = useMemo(() => getHoldings(profile), [profile]);
+  const holdings = useMemo(() => buildHoldings(profile), [profile]);
+  const filteredHoldings = holdings.filter((holding) => {
+    const matchesKind =
+      holdingFilter === "전체" || holding.kind === holdingFilter;
+    const keyword = query.trim().toLocaleLowerCase("ko-KR");
+    const matchesQuery =
+      keyword.length === 0 ||
+      [
+        holding.ticker,
+        holding.name,
+        holding.sector,
+        holding.role,
+        holding.market,
+        holding.vehicle,
+      ]
+        .join(" ")
+        .toLocaleLowerCase("ko-KR")
+        .includes(keyword);
+    return matchesKind && matchesQuery;
+  });
   const riskAssets = profile.allocations
     .filter((item) =>
-      ["market", "factor", "stocks"].includes(item.id),
+      ["market", "strategy", "stocks"].includes(item.id),
+    )
+    .reduce((sum, item) => sum + item.percent, 0);
+  const defenseAssets = profile.allocations
+    .filter((item) =>
+      ["government", "credit", "cash"].includes(item.id),
     )
     .reduce((sum, item) => sum + item.percent, 0);
   const donutStyle = {
@@ -373,83 +533,117 @@ export default function Home() {
   } as CSSProperties;
 
   return (
-    <main>
+    <main id="top">
       <header className="site-header">
         <a className="brand" href="#top" aria-label="FIDI 홈">
           <span className="brand-mark">F</span>
           <span>
             <strong>FIDI</strong>
-            <small>Portfolio Lab</small>
+            <small>KRW PORTFOLIO LAB</small>
           </span>
         </a>
         <nav aria-label="주요 메뉴">
-          <a href="#portfolio">포트폴리오</a>
+          <a href="#profile">투자자 유형</a>
+          <a href="#portfolio">자산배분</a>
           <a href="#holdings">편입종목</a>
-          <a href="#rotation">교체규칙</a>
+          <a href="#rules">운용규칙</a>
         </nav>
-        <span className="model-pill">
+        <span className="status-pill">
           <i />
           KRW Dynamic V4
         </span>
       </header>
 
-      <section className="hero" id="top">
+      <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">FIDI PORTFOLIO LAB · VERIFIED 34/34</p>
+          <span className="service-badge">FIDI ASSET ALLOCATION</span>
           <h1>
-            투자자 유형을 고르면
+            투자 성향별로
             <br />
-            <em>포트폴리오가 완성됩니다.</em>
+            ETF·주식·채권을
+            <br />
+            <em>한눈에 설계하세요.</em>
           </h1>
-          <p className="hero-description">
-            자산군 비중은 위험성향에 맞춰 지키고, ETF와 개별주는
-            시장 변화에 따라 규칙으로 다시 고릅니다.
+          <p>
+            ETF에만 몰아넣지 않습니다. 시장 ETF, 섹터별 대표주 5개,
+            채권, 대체자산, 현금을 투자자 유형에 맞춰 나누고 종목은
+            정해진 규칙으로 다시 고릅니다.
           </p>
-          <div className="hero-facts">
-            <span>5개 투자자 유형</span>
-            <span>ETF·주식 동적 선정</span>
-            <span>원화 기준</span>
+          <div className="hero-actions">
+            <a className="primary-action" href="#profile">
+              내 포트폴리오 만들기 <span>→</span>
+            </a>
+            <a className="text-action" href="#rules">
+              선정 원칙 보기
+            </a>
           </div>
         </div>
 
-        <div className="hero-board" aria-label="운용 구조 요약">
-          <div className="board-top">
-            <span>운용 구조</span>
-            <strong>비중은 정책으로, 종목은 규칙으로</strong>
+        <aside className="hero-panel" aria-label="서비스 요약">
+          <div className="hero-panel-top">
+            <span>PORTFOLIO ENGINE</span>
+            <strong>자산배분은 안정적으로,<br />종목선정은 유연하게.</strong>
           </div>
-          <div className="flow-row">
+          <div className="mini-allocation" aria-hidden="true">
+            <i style={{ width: "40%" }} />
+            <i style={{ width: "20%" }} />
+            <i style={{ width: "25%" }} />
+            <i style={{ width: "15%" }} />
+          </div>
+          <div className="engine-steps">
             <div>
-              <span>01</span>
-              <strong>유형 선택</strong>
-              <small>위험예산 확정</small>
+              <b>01</b>
+              <span>성향 진단</span>
             </div>
-            <b>→</b>
             <div>
-              <span>02</span>
-              <strong>자산 배분</strong>
-              <small>7개 슬리브</small>
+              <b>02</b>
+              <span>비중 설계</span>
             </div>
-            <b>→</b>
             <div>
-              <span>03</span>
-              <strong>종목 선정</strong>
-              <small>분기·주간 교체</small>
+              <b>03</b>
+              <span>종목 교체</span>
             </div>
           </div>
-          <div className="board-note">
-            <span className="pulse" />
-            현재 일반형 초기종목은 V3에서 승계
-          </div>
-        </div>
+          <p>
+            <i />
+            5개 투자자 유형 · 7개 자산 슬리브 · 5개 주식 섹터
+          </p>
+        </aside>
       </section>
 
-      <section className="selector-section" aria-labelledby="selector-title">
+      <section className="overview-strip" aria-label="모델 특징">
+        <article>
+          <span>투자자 유형</span>
+          <strong>5</strong>
+          <small>안정형부터 대회형까지</small>
+        </article>
+        <article>
+          <span>자산 구분</span>
+          <strong>4+</strong>
+          <small>주식 · ETF · 채권 · 현금</small>
+        </article>
+        <article>
+          <span>대표주 섹터</span>
+          <strong>5</strong>
+          <small>성장과 방어를 함께 구성</small>
+        </article>
+        <article>
+          <span>운용 주기</span>
+          <strong>주간~분기</strong>
+          <small>유형별 교체 속도 차등</small>
+        </article>
+      </section>
+
+      <section className="profile-section" id="profile">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">STEP 01</p>
-            <h2 id="selector-title">나의 투자자 유형</h2>
+            <span className="step-label">STEP 01</span>
+            <h2>어떤 방식으로 운용할까요?</h2>
           </div>
-          <p>유형을 바꾸면 아래 포트폴리오가 즉시 재계산됩니다.</p>
+          <p>
+            유형을 바꾸면 자산 비중과 종목별 투자금이 즉시 다시
+            계산됩니다.
+          </p>
         </div>
 
         <div className="profile-grid" role="list">
@@ -459,12 +653,16 @@ export default function Home() {
               <button
                 className={`profile-card ${active ? "active" : ""}`}
                 key={candidate.code}
-                onClick={() => setProfileCode(candidate.code)}
+                onClick={() => {
+                  setProfileCode(candidate.code);
+                  setHoldingFilter("전체");
+                  setQuery("");
+                }}
                 aria-pressed={active}
                 type="button"
               >
-                <span className="profile-topline">
-                  <span className="risk-dots" aria-label={`위험도 ${candidate.riskLevel}`}>
+                <span className="profile-card-top">
+                  <span className="risk-bars" aria-label={`위험도 ${candidate.riskLevel}`}>
                     {[1, 2, 3, 4, 5].map((level) => (
                       <i
                         className={level <= candidate.riskLevel ? "filled" : ""}
@@ -475,8 +673,9 @@ export default function Home() {
                   <small>RISK {candidate.riskLevel}</small>
                 </span>
                 <strong>{candidate.name}</strong>
+                <b>{candidate.shortName}</b>
                 <span>{candidate.description}</span>
-                <b>{active ? "선택됨" : "선택하기"}</b>
+                <em>{active ? "선택됨" : "선택하기"} →</em>
               </button>
             );
           })}
@@ -484,31 +683,34 @@ export default function Home() {
       </section>
 
       <section className="portfolio-section" id="portfolio">
-        <div className="section-heading">
+        <div className="portfolio-titlebar">
           <div>
-            <p className="eyebrow">STEP 02</p>
+            <span className="step-label">STEP 02 · ASSET MIX</span>
             <h2>{profile.name} 포트폴리오</h2>
+            <p>{profile.description}</p>
           </div>
-          <div className="amount-control">
-            <span>투자금액</span>
-            <strong>{amountLabel(amount)}</strong>
+          <div className="amount-display">
+            <span>총 투자금액</span>
+            <strong>{krw.format(amount)}</strong>
           </div>
         </div>
 
-        <div className="amount-presets" aria-label="투자금액 선택">
-          {[10_000_000, 50_000_000, 100_000_000, 300_000_000].map(
-            (value) => (
-              <button
-                className={amount === value ? "active" : ""}
-                key={value}
-                onClick={() => setAmount(value)}
-                type="button"
-              >
-                {amountLabel(value)}
-              </button>
-            ),
-          )}
-          <label>
+        <div className="amount-toolbar">
+          <div className="amount-presets" aria-label="투자금액 빠른 선택">
+            {[10_000_000, 50_000_000, 100_000_000, 300_000_000].map(
+              (value) => (
+                <button
+                  className={amount === value ? "active" : ""}
+                  key={value}
+                  onClick={() => setAmount(value)}
+                  type="button"
+                >
+                  {amountLabel(value)}
+                </button>
+              ),
+            )}
+          </div>
+          <label className="amount-slider">
             <span className="sr-only">투자금액 조절</span>
             <input
               type="range"
@@ -518,106 +720,116 @@ export default function Home() {
               value={amount}
               onChange={(event) => setAmount(Number(event.target.value))}
             />
+            <small>1천만원</small>
+            <small>5억원</small>
           </label>
         </div>
 
         {profile.code === "CONTEST" && (
-          <div className="contest-alert" role="status">
-            <span>대회형 활성화 전 확인</span>
-            <strong>
-              대회 규정 URL과 허용시장을 입력하면 실제 후보종목이
-              채워집니다.
-            </strong>
+          <div className="contest-notice" role="status">
+            <span>대회 모드</span>
+            <p>
+              대회 규정과 허용시장을 먼저 입력한 뒤 주간 점수 상위
+              후보를 확정합니다. 일간 -3%, 주간 -6%, 누적 -10%를
+              손실 통제 기준으로 사용합니다.
+            </p>
           </div>
         )}
 
-        <div className="portfolio-grid">
-          <article className="allocation-card">
-            <div
-              className="donut"
-              style={donutStyle}
-              aria-label={`${profile.name} 자산배분 도넛 차트`}
-            >
+        <div className="portfolio-dashboard">
+          <article className="donut-card">
+            <div className="card-title">
               <div>
-                <small>위험자산</small>
-                <strong>{riskAssets}%</strong>
-                <span>총 {amountLabel(amount)}</span>
+                <span>ASSET ALLOCATION</span>
+                <h3>목표 자산배분</h3>
+              </div>
+              <small>합계 100%</small>
+            </div>
+            <div className="donut-wrap">
+              <div
+                className="donut"
+                style={donutStyle}
+                aria-label={`${profile.name} 자산배분 도넛 차트`}
+              >
+                <div>
+                  <small>성장자산</small>
+                  <strong>{riskAssets}%</strong>
+                  <span>{krw.format((amount * riskAssets) / 100)}</span>
+                </div>
+              </div>
+              <div className="donut-legend">
+                {profile.allocations
+                  .filter((allocation) => allocation.percent > 0)
+                  .map((allocation) => (
+                    <div key={allocation.id}>
+                      <i style={{ background: allocation.color }} />
+                      <span>{allocation.label}</span>
+                      <strong>{allocation.percent}%</strong>
+                    </div>
+                  ))}
               </div>
             </div>
-            <div className="allocation-summary">
-              <span>정기검토</span>
-              <strong>{profile.cadence}</strong>
-              <span>다음 검토</span>
-              <strong>{profile.nextReview}</strong>
-            </div>
-            <p>
-              비중은 유형 정책으로 유지하며, 편입종목만 점수와
-              교체완충 규칙에 따라 변경됩니다.
-            </p>
           </article>
 
-          <article className="allocation-list-card">
-            <div className="card-heading">
+          <article className="allocation-table-card">
+            <div className="card-title">
               <div>
-                <p className="eyebrow">ALLOCATION</p>
-                <h3>자산군별 목표비중</h3>
+                <span>KRW TARGET</span>
+                <h3>자산별 투자금액</h3>
               </div>
-              <span>합계 100%</span>
+              <small>{profile.cadence} 리밸런싱</small>
             </div>
-            <div className="allocation-list">
+            <div className="allocation-table">
               {profile.allocations
                 .filter((allocation) => allocation.percent > 0)
                 .map((allocation) => (
                   <div className="allocation-row" key={allocation.id}>
                     <span
-                      className="color-dot"
-                      style={{ background: allocation.color }}
-                    />
+                      className="allocation-icon"
+                      style={{
+                        color: allocation.color,
+                        background: `${allocation.color}18`,
+                      }}
+                    >
+                      {allocation.label.slice(0, 1)}
+                    </span>
                     <div>
-                      <span>{allocation.label}</span>
-                      <div className="bar">
+                      <strong>{allocation.label}</strong>
+                      <span className="allocation-bar">
                         <i
                           style={{
                             width: `${allocation.percent}%`,
                             background: allocation.color,
                           }}
                         />
-                      </div>
+                      </span>
                     </div>
-                    <strong>{allocation.percent}%</strong>
-                    <b>{krw.format((amount * allocation.percent) / 100)}</b>
+                    <b>{allocation.percent}%</b>
+                    <em>
+                      {krw.format((amount * allocation.percent) / 100)}
+                    </em>
                   </div>
                 ))}
             </div>
           </article>
 
-          <aside className="metric-stack">
-            <article>
-              <span>참고 연환산</span>
-              <strong>{profile.cagr}</strong>
-              <small>
-                {profile.code === "CONTEST"
-                  ? "대회 시작 후 집계"
-                  : "현재 구성종목 소급 참고치"}
-              </small>
+          <aside className="metric-column">
+            <article className="metric-card">
+              <span>성장 / 방어</span>
+              <strong>
+                {riskAssets}<small> / {defenseAssets}</small>
+              </strong>
+              <p>대체자산은 별도 분산 비중</p>
             </article>
-            <article>
-              <span>
-                {profile.code === "CONTEST"
-                  ? "계좌 손실중단"
-                  : "참고 최대낙폭"}
-              </span>
-              <strong>{profile.drawdown}</strong>
-              <small>
-                {profile.code === "CONTEST"
-                  ? "일간 -3% · 주간 -6%"
-                  : "실전 성과가 아닌 진단값"}
-              </small>
+            <article className="metric-card">
+              <span>참고 기대범위</span>
+              <strong>{profile.referenceReturn}</strong>
+              <p>장기 모델 가정치 · 보장 아님</p>
             </article>
-            <article className="verified-card">
-              <span>정책 검증</span>
-              <strong>34 / 34</strong>
-              <small>설정·선별 규칙 테스트 PASS</small>
+            <article className="metric-card accent">
+              <span>참고 최대낙폭</span>
+              <strong>{profile.referenceDrawdown}</strong>
+              <p>다음 점검 {profile.nextReview}</p>
             </article>
           </aside>
         </div>
@@ -626,118 +838,248 @@ export default function Home() {
       <section className="holdings-section" id="holdings">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">STEP 03</p>
-            <h2>현재 편입 구조</h2>
+            <span className="step-label">STEP 03 · HOLDINGS</span>
+            <h2>현재 실제 편입 상품</h2>
           </div>
           <p>
-            {profile.code === "CONTEST"
-              ? "대회 규정 확인 후 슬롯별 실제 종목을 선정합니다."
-              : "초기 V3 종목이며 첫 동적 검토부터 변경될 수 있습니다."}
+            공식 상품명과 거래소 티커를 기준으로 표시합니다. 동적선정
+            상품은 현재 편입 종목이며 다음 점검 때 교체될 수 있습니다.
           </p>
         </div>
 
-        <div className="holding-grid">
-          {holdings.map((holding) => (
-            <article
-              className={`holding-card ${holding.pending ? "pending" : ""}`}
-              key={`${holding.ticker}-${holding.role}`}
-            >
-              <div className="ticker-row">
-                <span>{holding.ticker.slice(0, 2)}</span>
-                <div>
-                  <strong>{holding.ticker}</strong>
-                  <small>{holding.kind}</small>
-                </div>
-                {holding.pending && <b>선정 대기</b>}
-              </div>
-              <h3>{holding.name}</h3>
-              <p>{holding.role}</p>
-              <div className="holding-value">
-                <strong>{holding.percent}%</strong>
-                <span>{krw.format((amount * holding.percent) / 100)}</span>
-              </div>
-            </article>
-          ))}
+        <div className="holdings-toolbar">
+          <label className="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="종목명, 티커 또는 섹터로 검색"
+              aria-label="편입종목 검색"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery("")}>
+                지우기
+              </button>
+            )}
+          </label>
+          <div className="holding-filters" aria-label="자산 종류 필터">
+            {filterOptions.map((option) => (
+              <button
+                className={holdingFilter === option ? "active" : ""}
+                key={option}
+                onClick={() => setHoldingFilter(option)}
+                aria-pressed={holdingFilter === option}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="holdings-meta">
+          <span>
+            <i />
+            최신 편입 기준일 {holdingsAsOf}
+          </span>
+          <strong>{filteredHoldings.length}개 상품 표시</strong>
+        </div>
+
+        <div className="holdings-card">
+          <div className="holdings-table holdings-header" aria-hidden="true">
+            <span>자산군</span>
+            <span>공식 상품명</span>
+            <span>시장 · 티커</span>
+            <span>운용 역할</span>
+            <span>비중</span>
+            <span>투자금액</span>
+          </div>
+          <div className="holding-rows">
+            {filteredHoldings.length > 0 ? (
+              filteredHoldings.map((holding) => (
+                <article
+                  className="holdings-table holding-row"
+                  key={`${holding.ticker}-${holding.kind}`}
+                >
+                  <div className="holding-category">
+                    <span className={`kind-icon kind-${holding.kind}`}>
+                      {holding.kind === "개별주식"
+                        ? "S"
+                        : holding.kind === "채권"
+                          ? "B"
+                          : holding.kind === "현금"
+                            ? "₩"
+                            : holding.kind === "대체자산"
+                              ? "A"
+                              : "E"}
+                    </span>
+                    <div>
+                      <small>{holding.kind}</small>
+                      <strong>{holding.sector}</strong>
+                    </div>
+                  </div>
+                  <div className="holding-product">
+                    <a
+                      href={holding.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${holding.name} 상품정보 열기`}
+                    >
+                      {holding.name}
+                      <span>↗</span>
+                    </a>
+                    <small>{holding.vehicle}</small>
+                    <b className={holding.dynamic ? "dynamic" : ""}>
+                      {holding.dynamic
+                        ? "현재 편입 · 교체 가능"
+                        : "기준 편입"}
+                    </b>
+                  </div>
+                  <div className="holding-code">
+                    <span>{holding.market}</span>
+                    <strong>{holding.ticker}</strong>
+                  </div>
+                  <p className="holding-role">
+                    {holding.role}
+                    <small>{holding.rotation} 검토</small>
+                  </p>
+                  <strong className="holding-percent">
+                    {holding.percent}%
+                  </strong>
+                  <strong className="holding-amount">
+                    {krw.format((amount * holding.percent) / 100)}
+                  </strong>
+                </article>
+              ))
+            ) : (
+              <div className="empty-state">
+                <strong>검색 결과가 없습니다.</strong>
+                <span>다른 종목명이나 섹터를 입력해 보세요.</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <p className="data-note">
+          위 종목코드와 공식 명칭은 한국시간 {holdingsAsOf} 최신 조회
+          기준 모델 포트폴리오의 실제 기준 라인업입니다. 기준일은
+          매일 자동으로 갱신됩니다. 채권·현금성·대체자산
+          슬리브는 증권계좌에서 거래 가능한 ETF로 구현했습니다. 가격,
+          거래 가능 여부, 세금과 수수료는 주문 직전에 다시 확인해야
+          합니다.
+        </p>
       </section>
 
-      <section className="rotation-section" id="rotation">
-        <div className="rotation-copy">
-          <p className="eyebrow">DYNAMIC SELECTION</p>
+      <section className="rules-section" id="rules">
+        <div className="rules-intro">
+          <span className="step-label">DYNAMIC SELECTION RULE</span>
           <h2>
-            무조건 고정하지 않고,
+            비중은 정책으로,
             <br />
-            <em>교체도 규칙대로.</em>
+            <em>종목은 데이터로.</em>
           </h2>
           <p>
-            후보사이트의 현재 목록을 과거에 소급하지 않습니다. 각
-            검토일의 출처와 시각을 저장하고 다음 거래일부터 반영합니다.
+            한 번 고른 ETF와 주식을 영구 보유하는 구조가 아닙니다.
+            정해진 날짜에 같은 기준으로 다시 평가해 교체 여부를
+            결정합니다.
           </p>
-          <div className="source-links">
+          <div className="source-list">
             <a
               href="https://www.funetf.co.kr/"
               target="_blank"
               rel="noreferrer"
             >
-              FUNETF <span>ETF 후보 확인 ↗</span>
+              <span>ETF 탐색</span>
+              <strong>FUNETF ↗</strong>
             </a>
             <a
               href="https://finance.naver.com/sise/"
               target="_blank"
               rel="noreferrer"
             >
-              네이버금융 <span>개별주 후보 확인 ↗</span>
+              <span>국내 종목 확인</span>
+              <strong>네이버 금융 ↗</strong>
+            </a>
+            <a
+              href="https://www.indexergo.com/index?group=usstock&frq=L&select=simpleView"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>섹터 리더 확인</span>
+              <strong>IndexErgo ↗</strong>
             </a>
           </div>
         </div>
 
-        <div className="rotation-timeline">
+        <div className="rule-flow">
           <article>
             <span>01</span>
             <div>
-              <small>후보 생성</small>
-              <h3>규모·유동성 필터</h3>
-              <p>저유동성, 투자경고, 레버리지·인버스를 먼저 제외합니다.</p>
+              <small>UNIVERSE</small>
+              <h3>후보군 만들기</h3>
+              <p>
+                거래 가능 ETF와 국내·미국 섹터 대표주를 모으고,
+                거래대금과 운용기간이 부족한 종목은 제외합니다.
+              </p>
             </div>
           </article>
           <article>
             <span>02</span>
             <div>
-              <small>점수 계산</small>
-              <h3>다기간 모멘텀</h3>
-              <p>21·63·126·252일 수익률과 변동성·비용을 함께 봅니다.</p>
+              <small>SCORE</small>
+              <h3>같은 기준으로 점수화</h3>
+              <p>
+                중기 모멘텀, 변동성, 거래대금, 비용, 섹터 중복도를
+                합산해 자산군 안에서 순위를 계산합니다.
+              </p>
             </div>
           </article>
           <article>
             <span>03</span>
             <div>
-              <small>교체 판단</small>
-              <h3>완충값과 최소보유</h3>
-              <p>조금 좋아진 후보로 자주 갈아타지 않도록 회전율을 통제합니다.</p>
+              <small>CONTROL</small>
+              <h3>교체 비용과 위험 제한</h3>
+              <p>
+                기존 종목보다 충분히 높은 점수일 때만 교체하고, 단일
+                종목·섹터·환율 노출 상한을 함께 적용합니다.
+              </p>
             </div>
           </article>
           <article>
             <span>04</span>
             <div>
-              <small>실행</small>
-              <h3>사람 검토 후 반영</h3>
-              <p>선정 결과는 주문 지시가 아니며, 다음 거래일 실행을 원칙으로 합니다.</p>
+              <small>REBALANCE</small>
+              <h3>유형별 주기로 실행</h3>
+              <p>
+                일반 유형은 월간 점검·분기 리밸런싱, 대회형은 주간
+                교체와 별도 손실중단 규칙을 사용합니다.
+              </p>
             </div>
           </article>
         </div>
       </section>
 
-      <footer>
+      <section className="closing-panel">
         <div>
+          <span>FIDI KRW DYNAMIC V4</span>
+          <h2>지금 선택한 {profile.name} 구성을 기준안으로 저장하세요.</h2>
+        </div>
+        <a href="#portfolio">
+          포트폴리오 다시 보기 <span>↑</span>
+        </a>
+      </section>
+
+      <footer>
+        <div className="footer-brand">
           <span className="brand-mark">F</span>
-          <strong>FIDI Portfolio Lab</strong>
+          <strong>FIDI</strong>
         </div>
         <p>
-          본 화면은 투자정책 시각화 및 연구용입니다. 과거 참고성과는
-          미래수익을 보장하지 않으며 실제 주문 전 상품 적격성과 비용을
-          확인해야 합니다.
+          본 화면은 투자전략 설계를 위한 모델 예시이며 투자 권유가
+          아닙니다. 과거 데이터와 모델 가정은 미래 수익을 보장하지
+          않습니다.
         </p>
-        <span>KRW Dynamic V4 · 2026.07.26</span>
+        <span>KRW Dynamic V4 · 2026</span>
       </footer>
     </main>
   );
