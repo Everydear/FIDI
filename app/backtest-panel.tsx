@@ -88,10 +88,12 @@ type BacktestSuccess = {
     koreanHistory: string;
     koreanOfficialAudit: {
       source: string;
+      status?: "verified" | "unavailable";
       date: string;
       matched: number;
       total: number;
-      maximumDifferencePercent: number;
+      maximumDifferencePercent: number | null;
+      error?: string;
     };
     fx: {
       source: string;
@@ -99,6 +101,9 @@ type BacktestSuccess = {
       observations: number;
       latestDate: string | null;
       latestRate: number | null;
+      sourceRole?: "primary" | "fallback";
+      fallbackUsed?: boolean;
+      notes?: string[];
     };
     koreanRiskFree: RateSource | null;
     usReferenceRate: RateSource | null;
@@ -124,9 +129,22 @@ type BacktestSuccess = {
     name: string;
     weight: number;
     provider: string;
+    sourceRole?: "primary" | "fallback";
+    fallbackUsed?: boolean;
+    notes?: string[];
     firstPriceDate: string;
     lastPriceDate: string;
     observations: number;
+  }>;
+  dataSources: Array<{
+    ticker: string;
+    name: string;
+    source: string;
+    sourceRole: "primary" | "fallback";
+    fallbackUsed: boolean;
+    latestDate: string | null;
+    observations: number;
+    notes: string[];
   }>;
   warnings: string[];
   period: {
@@ -909,13 +927,14 @@ export function BacktestPanel({
               <dl>
                 <div>
                   <dt>가격 데이터</dt>
-                  <dd>Massive + KRX 대조</dd>
+                  <dd>{state.data.providers.prices}</dd>
                 </div>
                 <div>
                   <dt>KRX 확인일</dt>
                   <dd>
-                    {state.data.providers.koreanOfficialAudit.date} ·{" "}
-                    {state.data.providers.koreanOfficialAudit.matched}종목
+                    {state.data.providers.koreanOfficialAudit.status === "unavailable"
+                      ? "공식 대조 확인 필요"
+                      : `${state.data.providers.koreanOfficialAudit.date} · ${state.data.providers.koreanOfficialAudit.matched}/${state.data.providers.koreanOfficialAudit.total}종목`}
                   </dd>
                 </div>
                 <div>
@@ -923,7 +942,7 @@ export function BacktestPanel({
                   <dd>
                     {state.data.providers.fx.latestRate === null
                       ? "확인 필요"
-                      : `${number.format(state.data.providers.fx.latestRate)}원 · ${state.data.providers.fx.latestDate ?? "최근일"}`}
+                      : `${number.format(state.data.providers.fx.latestRate)}원 · ${state.data.providers.fx.latestDate ?? "최근일"}${state.data.providers.fx.fallbackUsed ? " · 대체 소스" : ""}`}
                   </dd>
                 </div>
                 <div>
@@ -968,8 +987,18 @@ export function BacktestPanel({
                 기준 구성 아님
               </p>
               <div className="api-connections">
-                <span className="connected">Massive 연결됨</span>
-                <span className="connected">KRX 확인됨</span>
+                <span className="connected">
+                  {state.data.providers.usPrices}
+                </span>
+                <span
+                  className={
+                    state.data.providers.koreanOfficialAudit.status === "verified"
+                      ? "connected"
+                      : ""
+                  }
+                >
+                  KRX {state.data.providers.koreanOfficialAudit.status === "verified" ? "대조됨" : "대조 확인 필요"}
+                </span>
                 <span className={state.data.providers.koreanRiskFree ? "connected" : ""}>
                   ECOS {state.data.providers.koreanRiskFree ? "연결됨" : "미연결"}
                 </span>
@@ -979,6 +1008,50 @@ export function BacktestPanel({
               </div>
             </article>
           </div>
+
+          <article className="source-audit-card" aria-label="상품별 데이터 출처">
+            <div className="source-audit-heading">
+              <div>
+                <span>데이터 출처</span>
+                <strong>상품별 가격 이력과 대체 소스</strong>
+              </div>
+              <small>
+                주 공급원이 응답하지 않으면 대체 소스를 사용하고, 해당 상품에 표시합니다.
+              </small>
+            </div>
+            <div className="source-audit-list">
+              {state.data.dataSources.map((source) => (
+                <div
+                  key={source.ticker}
+                  className={source.fallbackUsed ? "fallback" : ""}
+                >
+                  <div className="source-audit-title">
+                    <strong>{source.name}</strong>
+                    <span>{source.ticker}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>출처</dt>
+                      <dd>{source.source}</dd>
+                    </div>
+                    <div>
+                      <dt>상태</dt>
+                      <dd>{source.fallbackUsed ? "대체 소스" : "주 소스"}</dd>
+                    </div>
+                    <div>
+                      <dt>최근일</dt>
+                      <dd>{source.latestDate ?? "확인 필요"}</dd>
+                    </div>
+                    <div>
+                      <dt>관측치</dt>
+                      <dd>{source.observations.toLocaleString("ko-KR")}</dd>
+                    </div>
+                  </dl>
+                  {source.notes.length > 0 && <p>{source.notes[0]}</p>}
+                </div>
+              ))}
+            </div>
+          </article>
 
           <div className="backtest-warnings">
             <strong>결과를 읽을 때 반드시 확인할 점</strong>

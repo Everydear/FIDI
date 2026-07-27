@@ -4,7 +4,18 @@ import { parseKrxClosingPrices } from "./krx.mjs";
 export type PricePoint = { date: string; value: number };
 export type PriceProvider =
   | "Massive SIP EOD + Corporate Actions"
-  | "Yahoo Finance Adjusted Chart";
+  | "Yahoo Finance Adjusted Chart"
+  | "Yahoo Finance Adjusted Chart (fallback)";
+
+export type PriceSourceRole = "primary" | "fallback";
+
+export type AssetSeriesResult = {
+  provider: PriceProvider;
+  points: PricePoint[];
+  sourceRole: PriceSourceRole;
+  fallbackUsed: boolean;
+  notes: string[];
+};
 
 export type DividendEvent = {
   ticker: string;
@@ -24,10 +35,12 @@ export type LatestQuote = {
 
 export type KrxAudit = {
   source: "한국거래소 KRX Open API";
+  status: "verified" | "unavailable";
   date: string;
   matched: number;
   total: number;
-  maximumDifferencePercent: number;
+  maximumDifferencePercent: number | null;
+  error?: string;
 };
 
 type CacheEntry<T> = { expiresAt: number; value: T };
@@ -426,31 +439,73 @@ export async function fetchAssetSeries(
     massiveApiKey?: string;
     dividendEvents?: DividendEvent[];
   },
-): Promise<{ provider: PriceProvider; points: PricePoint[] }> {
+): Promise<AssetSeriesResult> {
   if (asset.market === "US") {
-    if (!options.massiveApiKey) {
-      throw new Error("MASSIVE_API_KEY가 연결되지 않았습니다.");
-    }
-    const closes = await fetchMassiveBars(
-      asset.id,
-      start,
-      end,
-      options.massiveApiKey,
-    );
-    return {
-      provider: "Massive SIP EOD + Corporate Actions",
-      points: createTotalReturnSeries(
-        closes,
-        (options.dividendEvents ?? []).filter(
-          (event) => event.ticker === asset.id,
+    try {
+      if (!options.massiveApiKey) {
+        throw new Error("MASSIVE_API_KEY가 연결되지 않았습니다.");
+      }
+      const closes = await fetchMassiveBars(
+        asset.id,
+        start,
+        end,
+        options.massiveApiKey,
+      );
+      return {
+        provider: "Massive SIP EOD + Corporate Actions",
+        points: createTotalReturnSeries(
+          closes,
+          (options.dividendEvents ?? []).filter(
+            (event) => event.ticker === asset.id,
+          ),
         ),
-      ),
-    };
+        sourceRole: "primary",
+        fallbackUsed: false,
+        notes: [],
+      };
+    } catch (primaryError) {
+      try {
+        const points = await fetchYahooAdjustedSeries(
+          asset.yahooSymbol,
+          start,
+          end,
+        );
+        return {
+          provider: "Yahoo Finance Adjusted Chart (fallback)",
+          points,
+          sourceRole: "fallback",
+          fallbackUsed: true,
+          notes: [
+            `Massive 주 공급원 실패: ${
+              primaryError instanceof Error
+                ? primaryError.message
+                : "알 수 없는 오류"
+            }`,
+            "Yahoo 수정주가로 대체했으며 미국 배당·분할 재구성 방식이 달라질 수 있습니다.",
+          ],
+        };
+      } catch (fallbackError) {
+        throw new Error(
+          `${asset.id} 가격 조회 실패 · 주 공급원: ${
+            primaryError instanceof Error
+              ? primaryError.message
+              : "알 수 없는 오류"
+          } · 대체 공급원: ${
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : "알 수 없는 오류"
+          }`,
+        );
+      }
+    }
   }
 
   return {
     provider: "Yahoo Finance Adjusted Chart",
     points: await fetchYahooAdjustedSeries(asset.yahooSymbol, start, end),
+    sourceRole: "primary",
+    fallbackUsed: false,
+    notes: ["국내 이력은 Yahoo 수정주가를 사용하고 최근 종가는 KRX로 대조합니다."],
   };
 }
 
@@ -580,6 +635,7 @@ export async function fetchKrxOfficialAudit(
 
     return {
       source: "한국거래소 KRX Open API",
+      status: "verified",
       date,
       matched: comparisons.length,
       total: comparisons.length,
@@ -590,6 +646,30 @@ export async function fetchKrxOfficialAudit(
   throw new Error(
     `KRX Open API에서 ${isoDateFromCompact(compactDate(end))} 이전의 대조 가능한 영업일을 찾지 못했습니다.`,
   );
+}
+
+export async function fetchKrxOfficialAuditSafe(
+  assets: BacktestAsset[],
+  seriesByTicker: Map<string, PricePoint[]>,
+  end: string,
+  apiKey?: string,
+): Promise<KrxAudit> {
+  try {
+    return await fetchKrxOfficialAudit(assets, seriesByTicker, end, apiKey);
+  } catch (error) {
+    const koreanAssets = assets.filter(
+      (asset) => asset.market === "KRX" && asset.krxDataset,
+    );
+    return {
+      source: "한국거래소 KRX Open API",
+      status: "unavailable",
+      date: end,
+      matched: 0,
+      total: koreanAssets.length,
+      maximumDifferencePercent: null,
+      error: error instanceof Error ? error.message : "KRX 대조 실패",
+    };
+  }
 }
 
 export async function fetchFredUsdKrwSeries(
@@ -629,6 +709,95 @@ export async function fetchFredUsdKrwSeries(
     }
     return points;
   });
+}
+
+async function fetchEcosUsdKrwSeries(
+  start: string,
+  end: string,
+  apiKey?: string,
+): Promise<PricePoint[]> {
+  if (!apiKey) throw new Error("ECOS_KEY가 연결되지 않았습니다.");
+  return cached(`ecos:036Y001:0000001:${start}:${end}`, async () => {
+    const endpoint = [
+      "https://ecos.bok.or.kr/api/StatisticSearch",
+      apiKey,
+      "json",
+      "kr",
+      "1",
+      "100000",
+      "036Y001",
+      "D",
+      compactDate(start),
+      compactDate(end),
+      "0000001",
+    ].join("/");
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`ECOS 원/달러 환율 조회 실패 (${response.status})`);
+    const payload = (await response.json()) as {
+      StatisticSearch?: {
+        row?: Array<{ TIME?: string; DATA_VALUE?: string }>;
+      };
+    };
+    const points = (payload.StatisticSearch?.row ?? []).flatMap((row) => {
+      const value = safeNumber(row.DATA_VALUE);
+      const time = row.TIME ?? "";
+      return time.length >= 8 && value && value > 0
+        ? [{ date: `${time.slice(0, 4)}-${time.slice(4, 6)}-${time.slice(6, 8)}`, value }]
+        : [];
+    });
+    if (points.length < 2) throw new Error("ECOS 원/달러 환율 관측치가 부족합니다.");
+    return points;
+  });
+}
+
+export async function fetchUsdKrwSeriesWithFallback(
+  start: string,
+  end: string,
+  options: { fredApiKey?: string; ecosApiKey?: string } = {},
+): Promise<{
+  points: PricePoint[];
+  provider: "FRED DEXKOUS" | "한국은행 ECOS 036Y001";
+  sourceRole: PriceSourceRole;
+  fallbackUsed: boolean;
+  notes: string[];
+}> {
+  let fredError: unknown;
+  try {
+    return {
+      points: await fetchFredUsdKrwSeries(start, end, options.fredApiKey),
+      provider: "FRED DEXKOUS",
+      sourceRole: "primary",
+      fallbackUsed: false,
+      notes: [],
+    };
+  } catch (error) {
+    fredError = error;
+  }
+
+  try {
+    return {
+      points: await fetchEcosUsdKrwSeries(start, end, options.ecosApiKey),
+      provider: "한국은행 ECOS 036Y001",
+      sourceRole: "fallback",
+      fallbackUsed: true,
+      notes: [
+        `FRED DEXKOUS 실패: ${
+          fredError instanceof Error ? fredError.message : "알 수 없는 오류"
+        }`,
+        "한국은행 ECOS 원/달러 환율로 대체했습니다.",
+      ],
+    };
+  } catch (ecosError) {
+    throw new Error(
+      `원/달러 환율 조회 실패 · FRED: ${
+        fredError instanceof Error ? fredError.message : "알 수 없는 오류"
+      } · ECOS: ${
+        ecosError instanceof Error ? ecosError.message : "알 수 없는 오류"
+      }`,
+    );
+  }
 }
 
 export function convertUsdSeriesToKrw(

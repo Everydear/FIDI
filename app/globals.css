@@ -2580,6 +2580,117 @@ footer {
   padding: 10px 12px;
 }
 
+.source-audit-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.source-audit-heading {
+  align-items: end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.source-audit-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.source-audit-heading span {
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.source-audit-heading strong {
+  font-size: 14px;
+}
+
+.source-audit-heading small {
+  color: var(--ink-faint);
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.source-audit-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 17px;
+}
+
+.source-audit-list > div {
+  background: #f8f9fc;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.source-audit-list > div.fallback {
+  background: #fffaf0;
+  border-color: #f0dfbb;
+}
+
+.source-audit-title {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.source-audit-title strong {
+  color: var(--navy);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.source-audit-title span {
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.source-audit-list dl {
+  display: grid;
+  gap: 5px;
+  margin: 11px 0 0;
+}
+
+.source-audit-list dl > div {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.source-audit-list dt {
+  color: var(--ink-faint);
+  font-size: 8px;
+}
+
+.source-audit-list dd {
+  color: var(--ink-soft);
+  font-size: 8px;
+  font-weight: 750;
+  margin: 0;
+  text-align: right;
+}
+
+.source-audit-list p {
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 8px;
+  line-height: 1.5;
+  margin: 10px 0 0;
+  padding-top: 9px;
+}
+
 .backtest-warnings {
   background: #fffaf0;
   border: 1px solid #f0dfbb;
@@ -3315,6 +3426,20 @@ input:focus-visible {
   }
 
   .backtest-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-audit-heading {
+    align-items: start;
+    display: grid;
+    gap: 8px;
+  }
+
+  .source-audit-heading small {
+    text-align: left;
+  }
+
+  .source-audit-list {
     grid-template-columns: 1fr;
   }
 

@@ -19,9 +19,9 @@ import {
   fetchAssetSeries,
   fetchEcosCdRate,
   fetchFredThreeMonthRate,
-  fetchFredUsdKrwSeries,
-  fetchKrxOfficialAudit,
+  fetchKrxOfficialAuditSafe,
   fetchMassiveDividendEvents,
+  fetchUsdKrwSeriesWithFallback,
   type PricePoint,
   type PriceProvider,
 } from "@/lib/backtest/providers";
@@ -41,6 +41,9 @@ type PricedAsset = {
   weight: number;
   prices: PricePoint[];
   provider: PriceProvider;
+  sourceRole: "primary" | "fallback";
+  fallbackUsed: boolean;
+  notes: string[];
 };
 
 function isIsoDate(value: string | null): value is string {
@@ -180,12 +183,8 @@ export async function GET(request: Request) {
     ),
   ];
 
-  if (!massiveApiKey || !krxAuthKey || !fredKey) {
-    const missing = [
-      !massiveApiKey && "MASSIVE_API_KEY",
-      !krxAuthKey && "KRX_AUTH_KEY",
-      !fredKey && "FRED_KEY",
-    ].filter(Boolean);
+  if (!fredKey && !process.env.ECOS_KEY?.trim()) {
+    const missing = ["FRED_KEY 또는 ECOS_KEY (환율 데이터)"].filter(Boolean);
     return NextResponse.json(
       {
         status: "data_access_required",
@@ -197,13 +196,19 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [ecosRateResult, fredRateResult, fxRates, dividendEvents] =
+    const [ecosRateResult, fredRateResult, fxResult, dividendEvents] =
       await Promise.all([
         fetchEcosCdRate(start, end, process.env.ECOS_KEY?.trim()),
         fetchFredThreeMonthRate(start, end, fredKey),
-        fetchFredUsdKrwSeries(start, end, fredKey),
-        fetchMassiveDividendEvents(usTickers, start, end, massiveApiKey),
+        fetchUsdKrwSeriesWithFallback(start, end, {
+          fredApiKey: fredKey,
+          ecosApiKey: process.env.ECOS_KEY?.trim(),
+        }),
+        massiveApiKey
+          ? fetchMassiveDividendEvents(usTickers, start, end, massiveApiKey)
+          : Promise.resolve([]),
       ]);
+    const fxRates = fxResult.points;
 
     const pricedUniverse = await Promise.all(
       universeAssets.map(async (asset) => {
@@ -221,6 +226,9 @@ export async function GET(request: Request) {
               ? convertUsdSeriesToKrw(result.points, fxRates)
               : result.points,
           provider: result.provider,
+          sourceRole: result.sourceRole,
+          fallbackUsed: result.fallbackUsed,
+          notes: result.notes,
         };
       }),
     );
@@ -240,7 +248,7 @@ export async function GET(request: Request) {
     const seriesByTicker = new Map(
       pricedUniverse.map((asset) => [asset.id, asset.prices]),
     );
-    const krxAudit = await fetchKrxOfficialAudit(
+    const krxAudit = await fetchKrxOfficialAuditSafe(
       universeAssets,
       seriesByTicker,
       end,
@@ -441,10 +449,26 @@ export async function GET(request: Request) {
     const providers = [
       ...new Set(pricedUniverse.map((asset) => asset.provider)),
     ];
+    const fallbackAssets = pricedUniverse.filter((asset) => asset.fallbackUsed);
+    const priceSourceLabel = providers.join(" · ");
+    const fxSourceLabel = `${fxResult.provider}${fxResult.fallbackUsed ? " (대체 소스)" : ""}`;
     const warnings = [
       "공식 채택 판단은 같은 주식·채권·금·현금 위험예산을 가진 정책 기준선과 비교합니다. TIGER 미국S&P500(360750) 100% 보유는 시장 참고치일 뿐 채택 벤치마크가 아닙니다.",
       "현재 화면의 고정 편입 종목을 과거에도 보유했다고 가정한 검증입니다. 과거 시점의 종목 선정 규칙 자체를 검증한 결과는 아닙니다.",
-      "미국 가격은 Massive SIP 종가와 배당·분할 자료로 총수익률을 재구성했습니다. 국내 전체 이력은 수정주가를 사용하고 최근 종가는 KRX Open API와 교차 대조했습니다.",
+      `가격 출처: ${priceSourceLabel}. 미국은 조정 종가와 배당·분할 자료를 사용하고, 국내 전체 이력은 Yahoo 수정주가를 사용합니다.`,
+      ...(fallbackAssets.length > 0
+        ? [
+            `대체 소스 사용: ${fallbackAssets.map((asset) => asset.id).join(", ")}. 주 공급원 장애 시 Yahoo 조정 종가로 대체했으므로 배당·분할 반영 방식이 달라질 수 있습니다.`,
+          ]
+        : []),
+      ...(krxAudit.status === "verified"
+        ? [
+            `최근 국내 종가는 KRX Open API와 ${krxAudit.matched}/${krxAudit.total}종목 대조를 완료했습니다.`,
+          ]
+        : [
+            `KRX 공식 대조는 완료되지 않았습니다: ${krxAudit.error ?? "확인 가능한 응답이 없습니다."} 가격 이력은 계속 표시하지만 공식 대조 상태를 확인한 뒤 해석하세요.`,
+          ]),
+      `환율 출처: ${fxSourceLabel}. ${fxResult.notes.length > 0 ? fxResult.notes[0] : "일별 원/달러 환율로 원화 환산했습니다."}`,
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
       `백테스트에는 거래수수료 ${transactionCostBps}bp + 예상 슬리피지 ${slippageBps}bp를 합친 실행비용 ${executionCostBps}bp를 반영했습니다. 실제 체결비용은 시장·주문규모에 따라 달라질 수 있습니다.`,
@@ -469,16 +493,23 @@ export async function GET(request: Request) {
       baseCurrency: "KRW",
       validationScope: "current-holdings-fixed",
       providers: {
-        prices: providers.join(" · "),
-        usPrices: "Massive SIP EOD + Corporate Actions",
+        prices: priceSourceLabel,
+        usPrices: pricedUniverse
+          .filter((asset) => asset.sleeve !== "cash" && asset.id.length > 0)
+          .map((asset) => asset.provider)
+          .filter((provider, index, values) => values.indexOf(provider) === index)
+          .join(" · "),
         koreanHistory: "Yahoo Finance 수정주가",
         koreanOfficialAudit: krxAudit,
         fx: {
-          source: "FRED",
-          series: "DEXKOUS",
+          source: fxResult.provider,
+          series: fxResult.provider === "FRED DEXKOUS" ? "DEXKOUS" : "036Y001/0000001",
           observations: fxRates.length,
           latestDate: fxRates.at(-1)?.date ?? null,
           latestRate: fxRates.at(-1)?.value ?? null,
+          sourceRole: fxResult.sourceRole,
+          fallbackUsed: fxResult.fallbackUsed,
+          notes: fxResult.notes,
         },
         koreanRiskFree: ecosRateResult
           ? { source: "한국은행 ECOS", ...ecosRateResult }
@@ -490,7 +521,7 @@ export async function GET(request: Request) {
       assumptions: {
         adjustedClose: true,
         dividendsAndSplits: "미국은 Massive 이벤트로 재투자, 한국은 수정주가에 반영",
-        fx: "FRED DEXKOUS 일별 원/달러 환율로 원화 환산",
+        fx: `${fxSourceLabel} 일별 원/달러 환율로 원화 환산`,
         rebalance: cadence,
         lockedRebalance: lockedCadence,
         dailyEvaluation: true,
@@ -523,11 +554,24 @@ export async function GET(request: Request) {
           result.metrics.totalReturn - benchmark.metrics.totalReturn,
         excessCagr: result.metrics.cagr - benchmark.metrics.cagr,
       },
-      holdings: pricedAssets.map(({ id, name, weight, prices, provider }) => ({
+      dataSources: pricedUniverse.map(({ id, name, prices, provider, sourceRole, fallbackUsed, notes }) => ({
+        ticker: id,
+        name,
+        source: provider,
+        sourceRole,
+        fallbackUsed,
+        latestDate: prices.at(-1)?.date ?? null,
+        observations: prices.length,
+        notes,
+      })),
+      holdings: pricedAssets.map(({ id, name, weight, prices, provider, sourceRole, fallbackUsed, notes }) => ({
         ticker: id,
         name,
         weight,
         provider,
+        sourceRole,
+        fallbackUsed,
+        notes,
         firstPriceDate: prices[0]?.date,
         lastPriceDate: prices.at(-1)?.date,
         observations: prices.length,
