@@ -162,6 +162,8 @@ const surveyQuestions: SurveyQuestion[] = [
   },
 ];
 
+const SURVEY_STORAGE_KEY = "fidi-profile-survey-v4.1";
+
 const profiles: Profile[] = [
   {
     code: "CONSERVATIVE",
@@ -341,6 +343,16 @@ function latestKoreaDateLabel(date = new Date()) {
       .map((part) => [part.type, part.value]),
   );
   return `${parts.year}.${parts.month}.${parts.day}`;
+}
+
+function surveySavedAtLabel(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function useLatestKoreaDate() {
@@ -606,6 +618,8 @@ export default function Home() {
     useState<ProfileCode>("MODERATE");
   const [surveyAnswers, setSurveyAnswers] = useState<SurveyAnswers>({});
   const [surveyResult, setSurveyResult] = useState<ProfileCode | null>(null);
+  const [surveyStep, setSurveyStep] = useState(0);
+  const [surveySavedAt, setSurveySavedAt] = useState<string | null>(null);
   const [showAlternateProfiles, setShowAlternateProfiles] = useState(false);
   const [amount, setAmount] = useState(100_000_000);
   const [holdingFilter, setHoldingFilter] =
@@ -620,6 +634,24 @@ export default function Home() {
       const params = new URLSearchParams(window.location.search);
       const sharedProfile = params.get("profile");
       const sharedAmount = Number(params.get("amount"));
+
+      try {
+        const stored = JSON.parse(
+          window.localStorage.getItem(SURVEY_STORAGE_KEY) ?? "null",
+        ) as {
+          answers?: SurveyAnswers;
+          result?: ProfileCode;
+          completedAt?: string;
+        } | null;
+        if (stored?.answers) setSurveyAnswers(stored.answers);
+        if (stored?.result && profiles.some((candidate) => candidate.code === stored.result)) {
+          setSurveyResult(stored.result);
+          setSurveySavedAt(stored.completedAt ?? null);
+          if (!sharedProfile) setProfileCode(stored.result);
+        }
+      } catch {
+        // 저장된 설문을 읽지 못해도 새 설문을 바로 시작할 수 있습니다.
+      }
 
       if (
         sharedProfile &&
@@ -679,6 +711,12 @@ export default function Home() {
   const surveyComplete = surveyQuestions.every(
     (question) => Boolean(surveyAnswers[question.id]),
   );
+  const answeredCount = surveyQuestions.filter(
+    (question) => Boolean(surveyAnswers[question.id]),
+  ).length;
+  const currentQuestion = surveyQuestions[surveyStep];
+  const currentAnswerSelected = Boolean(surveyAnswers[currentQuestion.id]);
+  const isLastSurveyStep = surveyStep === surveyQuestions.length - 1;
   const recommendedProfile = surveyResult
     ? profiles.find((candidate) => candidate.code === surveyResult)
     : null;
@@ -692,8 +730,34 @@ export default function Home() {
   function completeSurvey() {
     if (!surveyComplete) return;
     const recommendation = recommendProfile(surveyAnswers);
+    const completedAt = new Date().toISOString();
     setSurveyResult(recommendation);
+    setSurveySavedAt(completedAt);
     selectProfile(recommendation);
+    try {
+      window.localStorage.setItem(
+        SURVEY_STORAGE_KEY,
+        JSON.stringify({
+          answers: surveyAnswers,
+          result: recommendation,
+          completedAt,
+        }),
+      );
+    } catch {
+      // 브라우저 저장이 막힌 환경에서도 추천 결과는 화면에 유지합니다.
+    }
+  }
+
+  function resetSurvey() {
+    setSurveyAnswers({});
+    setSurveyResult(null);
+    setSurveySavedAt(null);
+    setSurveyStep(0);
+    try {
+      window.localStorage.removeItem(SURVEY_STORAGE_KEY);
+    } catch {
+      // 화면 상태는 초기화하고 기기 저장 실패는 무시합니다.
+    }
   }
 
   async function sharePortfolio() {
@@ -834,56 +898,93 @@ export default function Home() {
             <p>정답은 없습니다. 지금의 목표와 투자할 수 있는 기간을 기준으로 답해 주세요.</p>
           </div>
 
+          <div className="survey-progress" aria-label="설문 진행률">
+            <div className="survey-progress-track" aria-hidden="true">
+              <i
+                style={{
+                  width: `${((surveyStep + 1) / surveyQuestions.length) * 100}%`,
+                }}
+              />
+            </div>
+            <div>
+              <span>
+                질문 {surveyStep + 1} / {surveyQuestions.length}
+              </span>
+              <strong>{answeredCount}개 답변 완료</strong>
+              <small>답변을 고르면 다음 질문으로 이동합니다.</small>
+            </div>
+          </div>
+
           <div className="survey-grid">
-            {surveyQuestions.map((question, index) => (
-              <fieldset className="survey-question" key={question.id}>
-                <legend>
-                  <span>Q{String(index + 1).padStart(2, "0")}</span>
-                  {question.label}
-                </legend>
-                <p>{question.help}</p>
-                <div className="survey-options">
-                  {question.options.map((option) => {
-                    const selected = surveyAnswers[question.id] === option.id;
-                    return (
-                      <label
-                        className={`survey-option ${selected ? "selected" : ""}`}
-                        key={option.id}
-                      >
-                        <input
-                          type="radio"
-                          name={question.id}
-                          value={option.id}
-                          checked={selected}
-                          onChange={() =>
-                            setSurveyAnswers((current) => ({
-                              ...current,
-                              [question.id]: option.id,
-                            }))
-                          }
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
+            <fieldset className="survey-question" key={currentQuestion.id}>
+              <legend>
+                <span>Q{String(surveyStep + 1).padStart(2, "0")}</span>
+                {currentQuestion.label}
+              </legend>
+              <p>{currentQuestion.help}</p>
+              <div className="survey-options">
+                {currentQuestion.options.map((option) => {
+                  const selected = surveyAnswers[currentQuestion.id] === option.id;
+                  return (
+                    <label
+                      className={`survey-option ${selected ? "selected" : ""}`}
+                      key={option.id}
+                    >
+                      <input
+                        type="radio"
+                        name={currentQuestion.id}
+                        value={option.id}
+                        checked={selected}
+                        onChange={() =>
+                          setSurveyAnswers((current) => ({
+                            ...current,
+                            [currentQuestion.id]: option.id,
+                          }))
+                        }
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
           </div>
 
           <div className="assessment-actions">
-            <button
-              className="assessment-submit"
-              type="button"
-              onClick={completeSurvey}
-              disabled={!surveyComplete}
-            >
-              내 투자 유형 확인 <span>→</span>
-            </button>
+            {surveyStep > 0 && (
+              <button
+                className="assessment-back"
+                type="button"
+                onClick={() => setSurveyStep((current) => current - 1)}
+              >
+                ← 이전 질문
+              </button>
+            )}
+            {isLastSurveyStep ? (
+              <button
+                className="assessment-submit"
+                type="button"
+                onClick={completeSurvey}
+                disabled={!surveyComplete}
+              >
+                내 투자 유형 확인 <span>→</span>
+              </button>
+            ) : (
+              <button
+                className="assessment-submit"
+                type="button"
+                onClick={() => setSurveyStep((current) => current + 1)}
+                disabled={!currentAnswerSelected}
+              >
+                다음 질문 <span>→</span>
+              </button>
+            )}
             <small>
-              {surveyComplete
-                ? "모든 답변을 선택했습니다."
-                : `${surveyQuestions.length}개 질문에 답해 주세요.`}
+              {isLastSurveyStep && !surveyComplete
+                ? `${surveyQuestions.length - answeredCount}개 질문이 남았습니다.`
+                : surveyComplete
+                  ? "모든 답변을 선택했습니다."
+                  : "답변을 선택하면 다음 단계가 열립니다. 마지막 단계에서 내 투자 유형 확인을 누릅니다."}
             </small>
           </div>
 
@@ -892,17 +993,28 @@ export default function Home() {
               <div>
                 <span>설문 추천 유형</span>
                 <strong>{recommendedProfile.name}</strong>
-                <p>{recommendedProfile.description}</p>
+                <p>
+                  {recommendedProfile.description} · 목표·기간·손실 감내·경험을
+                  종합한 추천입니다.
+                </p>
               </div>
               <div className="survey-result-actions">
                 <small>
                   현재 {profile.name} 구성을 보고 있습니다.
+                  {surveySavedAt
+                    ? ` ${surveySavedAtLabel(surveySavedAt)} 진단`
+                    : ""}
                 </small>
-                {profile.code !== recommendedProfile.code && (
-                  <button type="button" onClick={() => selectProfile(recommendedProfile.code)}>
-                    추천 유형으로 돌아가기
+                <div>
+                  {profile.code !== recommendedProfile.code && (
+                    <button type="button" onClick={() => selectProfile(recommendedProfile.code)}>
+                      추천 유형으로 돌아가기
+                    </button>
+                  )}
+                  <button className="survey-reset" type="button" onClick={resetSurvey}>
+                    설문 다시 하기
                   </button>
-                )}
+                </div>
               </div>
             </div>
           )}

@@ -299,6 +299,29 @@ const number = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 2,
 });
 
+const dailyChecklistItems = [
+  {
+    id: "freshness",
+    label: "기준일 확인",
+    detail: "후보 가격과 환율이 표시된 최신 영업일인지 확인",
+  },
+  {
+    id: "signal",
+    label: "유지·교체 비교",
+    detail: "현재 편입과 1위 후보의 점수 차이를 확인",
+  },
+  {
+    id: "cost",
+    label: "비용·비중 확인",
+    detail: "예상 비용과 목표 비중 이탈 폭을 함께 확인",
+  },
+  {
+    id: "execution",
+    label: "실행 조건 확인",
+    detail: "거래 가능 여부와 수량을 직접 확인한 뒤 결정",
+  },
+] as const;
+
 const cadenceLabel = {
   weekly: "주간",
   monthly: "월간",
@@ -338,6 +361,19 @@ export function BacktestPanel({
 }) {
   const [state, setState] = useState<BacktestState>({ kind: "idle" });
   const [signalSaved, setSignalSaved] = useState(false);
+  const [dailyChecklist, setDailyChecklist] = useState<Record<string, boolean>>({});
+
+  function loadDailyChecklist(data: BacktestSuccess) {
+    const storageKey = `fidi-daily-checklist-v4.1-${data.profile}-${data.dailyGuide.asOf}`;
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem(storageKey) ?? "{}",
+      ) as Record<string, boolean>;
+      return stored;
+    } catch {
+      return {};
+    }
+  }
 
   const chartLines = useMemo(
     () => {
@@ -415,6 +451,20 @@ export function BacktestPanel({
     URL.revokeObjectURL(objectUrl);
   }
 
+  function toggleDailyChecklist(id: string) {
+    if (state.kind !== "success") return;
+    const storageKey = `fidi-daily-checklist-v4.1-${state.data.profile}-${state.data.dailyGuide.asOf}`;
+    setDailyChecklist((current) => {
+      const next = { ...current, [id]: !current[id] };
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        // 체크 상태는 기기 저장이 막혀도 화면에서 계속 사용할 수 있습니다.
+      }
+      return next;
+    });
+  }
+
   async function executeBacktest() {
     setSignalSaved(false);
     setState({ kind: "loading" });
@@ -434,6 +484,7 @@ export function BacktestPanel({
         return;
       }
       const verified = payload as BacktestSuccess;
+      setDailyChecklist(loadDailyChecklist(verified));
       recordDailySignal(verified);
       setState({ kind: "success", data: verified });
     } catch {
@@ -555,10 +606,46 @@ export function BacktestPanel({
                 </button>
                 <small>
                   {signalSaved
-                    ? "이 기기에 오늘 기록을 저장했습니다."
-                    : "계산 결과를 날짜별로 보관할 수 있습니다."}
+                    ? "오늘 결과를 이 기기에 자동 기록했습니다."
+                    : "결과는 날짜별로 이 기기에 기록됩니다."}
                 </small>
               </div>
+            </div>
+
+            <div className="daily-checklist" aria-label="오늘 실행 전 체크리스트">
+              <div className="daily-checklist-heading">
+                <div>
+                  <span>실행 전 체크</span>
+                  <strong>오늘 확인할 항목</strong>
+                </div>
+                <b>
+                  {dailyChecklistItems.filter((item) => dailyChecklist[item.id]).length}/
+                  {dailyChecklistItems.length} 완료
+                </b>
+              </div>
+              <div className="daily-checklist-grid">
+                {dailyChecklistItems.map((item) => (
+                  <label
+                    className={dailyChecklist[item.id] ? "checked" : ""}
+                    key={item.id}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(dailyChecklist[item.id])}
+                      onChange={() => toggleDailyChecklist(item.id)}
+                    />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p>
+                {dailyChecklistItems.every((item) => dailyChecklist[item.id])
+                  ? "확인 항목을 모두 체크했습니다. 실제 실행은 거래 가능 여부와 수량을 다시 확인한 뒤 결정하세요."
+                  : "체크박스를 누르며 오늘 확인한 내용을 남겨 보세요. 주문은 자동으로 실행되지 않습니다."}
+              </p>
             </div>
 
             <div className="daily-guide-groups">
@@ -624,6 +711,9 @@ export function BacktestPanel({
                 ))}
               </ol>
             </div>
+            <p className="daily-guide-notice">
+              데이터 안내 · {state.data.dailyGuide.dataNotice}
+            </p>
           </section>
 
           <section

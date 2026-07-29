@@ -526,7 +526,51 @@ footer {
 .survey-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.survey-progress {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.survey-progress-track {
+  background: #ececf5;
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.survey-progress-track i {
+  background: linear-gradient(90deg, var(--primary), #8f87ff);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.survey-progress > div:last-child {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.survey-progress span {
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.survey-progress strong {
+  color: var(--navy);
+  font-size: 9px;
+}
+
+.survey-progress small {
+  color: var(--ink-faint);
+  font-size: 9px;
+  margin-left: auto;
 }
 
 .survey-question {
@@ -638,6 +682,21 @@ footer {
   cursor: not-allowed;
 }
 
+.assessment-back {
+  background: #f5f6fa;
+  border: 1px solid var(--line) !important;
+  border-radius: 11px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 13px 15px;
+}
+
+.assessment-back:hover {
+  background: #ececf5;
+  color: var(--navy);
+}
+
 .assessment-submit span {
   font-size: 16px;
 }
@@ -691,6 +750,14 @@ footer {
   justify-items: end;
 }
 
+.survey-result-actions > div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: end;
+}
+
 .survey-result-actions button {
   background: white;
   border: 1px solid #c9c4ff;
@@ -699,6 +766,16 @@ footer {
   font-size: 10px;
   font-weight: 800;
   padding: 9px 11px;
+}
+
+.survey-result-actions button.survey-reset {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-faint);
+}
+
+.survey-result-actions button.survey-reset:hover {
+  color: var(--primary);
 }
 
 .alternate-profiles-toggle {
@@ -1908,6 +1985,98 @@ footer {
   text-align: center;
 }
 
+.daily-checklist {
+  background: #fbfbff;
+  border-bottom: 1px solid var(--line);
+  padding: 20px 24px 18px;
+}
+
+.daily-checklist-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.daily-checklist-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.daily-checklist-heading span {
+  color: var(--primary);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.daily-checklist-heading strong {
+  font-size: 12px;
+}
+
+.daily-checklist-heading b {
+  background: #eeedff;
+  border-radius: 999px;
+  color: var(--primary-dark);
+  font-size: 8px;
+  padding: 7px 10px;
+}
+
+.daily-checklist-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 13px;
+}
+
+.daily-checklist-grid label {
+  align-items: flex-start;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  min-height: 70px;
+  padding: 11px;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.daily-checklist-grid label:hover,
+.daily-checklist-grid label.checked {
+  background: #f0efff;
+  border-color: #c8c3ff;
+}
+
+.daily-checklist-grid input {
+  accent-color: var(--primary);
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+}
+
+.daily-checklist-grid label > span {
+  display: grid;
+  gap: 4px;
+}
+
+.daily-checklist-grid strong {
+  color: var(--navy);
+  font-size: 9px;
+}
+
+.daily-checklist-grid small {
+  color: var(--ink-faint);
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.daily-checklist > p,
+.daily-guide-notice {
+  color: var(--ink-faint);
+  font-size: 8px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
 .daily-guide-groups {
   display: grid;
   gap: 12px;
@@ -2083,6 +2252,13 @@ footer {
   font-size: 8px;
   line-height: 1.5;
   padding-left: 3px;
+}
+
+.daily-guide-notice {
+  background: #f8f9fc;
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 13px 24px 16px;
 }
 
 .readiness-card {
@@ -3127,6 +3303,15 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .survey-progress > div:last-child {
+    flex-wrap: wrap;
+  }
+
+  .survey-progress small {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .survey-result {
     align-items: start;
     display: grid;
@@ -3135,6 +3320,10 @@ input:focus-visible {
   .survey-result-actions {
     align-items: start;
     justify-items: start;
+  }
+
+  .survey-result-actions > div {
+    justify-content: start;
   }
 
   .portfolio-section {
@@ -3462,6 +3651,10 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .daily-checklist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .execution-guide {
     gap: 16px;
     grid-template-columns: 1fr;
@@ -3530,6 +3723,14 @@ input:focus-visible {
 
   .daily-guide-groups {
     padding: 14px;
+  }
+
+  .daily-checklist {
+    padding: 18px 16px 16px;
+  }
+
+  .daily-checklist-grid {
+    grid-template-columns: 1fr;
   }
 
   .daily-guide-groups header {
