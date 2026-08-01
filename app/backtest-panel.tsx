@@ -109,6 +109,22 @@ type BacktestSuccess = {
     dynamicEndingValue: number;
     fixedHoldingsEndingValue: number;
   };
+  riskAnalytics?: {
+    status: "CHECKED" | "LIMITED_DATA";
+    observations: number;
+    var95DailyLoss: number | null;
+    cvar95DailyLoss: number | null;
+    var99DailyLoss: number | null;
+    cvar99DailyLoss: number | null;
+    downsideDeviation: number | null;
+    sortino: number | null;
+    maximumDrawdown: number | null;
+    maximumDrawdownDurationObservations: number;
+    maximumDrawdownDurationDays: number;
+    maximumDrawdownStart: string | null;
+    maximumDrawdownEnd: string | null;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH" | "LIMITED_DATA";
+  };
   providers: {
     prices: string;
     usPrices: string;
@@ -916,6 +932,50 @@ export function BacktestPanel({
                     : `평균 ${percent.format(state.data.guidance.statistics.walkForward.meanExcessCagr)}`}
                 </small>
               </article>
+              {state.data.riskAnalytics && (
+                <>
+                  <article>
+                    <span>95% 하루 손실</span>
+                    <strong>
+                      {state.data.riskAnalytics.var95DailyLoss === null
+                        ? "—"
+                        : percent.format(state.data.riskAnalytics.var95DailyLoss)}
+                    </strong>
+                    <small>과거 분포 기준 손실 임계값</small>
+                  </article>
+                  <article>
+                    <span>95% CVaR</span>
+                    <strong>
+                      {state.data.riskAnalytics.cvar95DailyLoss === null
+                        ? "—"
+                        : percent.format(state.data.riskAnalytics.cvar95DailyLoss)}
+                    </strong>
+                    <small>임계값을 넘은 날의 평균 손실</small>
+                  </article>
+                  <article>
+                    <span>Sortino 지수</span>
+                    <strong>
+                      {state.data.riskAnalytics.sortino === null
+                        ? "—"
+                        : number.format(state.data.riskAnalytics.sortino)}
+                    </strong>
+                    <small>하락 변동성만 반영</small>
+                  </article>
+                  <article>
+                    <span>최대 낙폭 지속</span>
+                    <strong>
+                      {state.data.riskAnalytics.maximumDrawdownDurationDays}일
+                    </strong>
+                    <small>
+                      위험 수준 {state.data.riskAnalytics.riskLevel === "HIGH"
+                        ? "높음"
+                        : state.data.riskAnalytics.riskLevel === "MEDIUM"
+                          ? "주의"
+                          : "낮음"}
+                    </small>
+                  </article>
+                </>
+              )}
               <article>
                 <span>가격 데이터 품질</span>
                 <strong>

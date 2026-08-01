@@ -33,6 +33,7 @@ import {
 import {
   buildValidationGuide,
   calculateWalkForwardStatistics,
+  calculateRiskAnalytics,
 } from "@/lib/backtest/validation.mjs";
 
 export const dynamic = "force-dynamic";
@@ -494,6 +495,7 @@ export async function GET(request: Request) {
         maxFolds: 6,
       },
     );
+    const riskAnalytics = calculateRiskAnalytics(result.fullCurve);
     const equityWeight = pricedAssets
       .filter((asset) => ["market", "strategy", "stocks"].includes(asset.sleeve))
       .reduce((sum, asset) => sum + asset.weight, 0);
@@ -565,6 +567,7 @@ export async function GET(request: Request) {
       `환율 출처: ${fxSourceLabel}. ${fxResult.notes.length > 0 ? fxResult.notes[0] : "일별 원/달러 환율로 원화 환산했습니다."}`,
       `시점별 후보 선정은 각 리밸런싱 날짜까지 공개된 20일·60일 모멘텀과 위험조정·추세 신호만 사용하고, 다음 구간의 수익률로 검증합니다. ${pointInTimeWarmupDate} 이전 구간은 61개 관측치 워밍업으로 제외했습니다.`,
       `후보 선정 결정 ${pointInTimeSelection.decisionCount}회, 후보 교체 신호 ${pointInTimeSelection.switchCount}회가 기록됐습니다.`,
+      "위험 분석은 실제 포트폴리오 곡선의 일별 수익률로 계산한 과거 분포 지표이며, 미래 손실 한도를 보장하지 않습니다.",
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
       `백테스트에는 거래수수료 ${transactionCostBps}bp + 예상 슬리피지 ${slippageBps}bp를 합친 실행비용 ${executionCostBps}bp를 반영했습니다. 실제 체결비용은 시장·주문규모에 따라 달라질 수 있습니다.`,
@@ -590,6 +593,7 @@ export async function GET(request: Request) {
       validationScope: "point-in-time-selection",
       pointInTimeSelection,
       selectionComparison,
+      riskAnalytics,
       providers: {
         prices: priceSourceLabel,
         usPrices: pricedUniverse

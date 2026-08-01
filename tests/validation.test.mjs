@@ -5,6 +5,7 @@ import {
   buildValidationGuide,
   calculateConcentration,
   calculateRelativeStatistics,
+  calculateRiskAnalytics,
   calculateWalkForwardStatistics,
 } from "../lib/backtest/validation.mjs";
 
@@ -36,6 +37,29 @@ test("reports maximum holding and Herfindahl concentration", () => {
   const concentration = calculateConcentration([0.5, 0.3, 0.2]);
   assert.equal(concentration.maximumWeight, 0.5);
   assert.ok(Math.abs(concentration.herfindahlIndex - 0.38) < 1e-12);
+});
+
+test("calculates historical tail loss and drawdown duration", () => {
+  const values = [
+    100, 102, 101, 98, 95, 96, 97, 99, 103, 104, 100, 98, 97, 101, 106,
+    108,
+  ];
+  let peak = values[0];
+  const portfolio = values.map((value, index) => {
+    peak = Math.max(peak, value);
+    return {
+      date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+      value,
+      drawdown: value / peak - 1,
+    };
+  });
+  const risk = calculateRiskAnalytics(portfolio);
+
+  assert.equal(risk.status, "CHECKED");
+  assert.ok(risk.var95DailyLoss > 0);
+  assert.ok(risk.cvar95DailyLoss >= risk.var95DailyLoss);
+  assert.ok(risk.maximumDrawdownDurationObservations >= 3);
+  assert.ok(risk.maximumDrawdownDurationDays >= 2);
 });
 
 test("scores a temporal holdout without looking into the test window", () => {
