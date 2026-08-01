@@ -180,3 +180,29 @@ test("point-in-time selector never uses prices after the decision date", () => {
   assert.equal(beforeSpike.selected[0].ticker, "STABLE");
   assert.equal(afterSpike.selected[0].ticker, "SPIKE");
 });
+
+test("backtest engine records selections at scheduled rebalances", () => {
+  const result = runBacktest({
+    assets: [
+      {
+        id: "A",
+        weight: 1,
+        prices: [
+          { date: "2026-01-30", value: 100 },
+          { date: "2026-02-02", value: 101 },
+          { date: "2026-03-02", value: 102 },
+        ],
+      },
+    ],
+    cadence: "monthly",
+    transactionCostBps: 0,
+    targetWeightsByDate: (date) => ({
+      weights: [1],
+      selected: [{ groupId: "strategy", ticker: "A", date }],
+    }),
+  });
+
+  assert.equal(result.selectionLog.length, 3);
+  assert.equal(result.selectionLog[0].date, "2026-01-30");
+  assert.equal(result.selectionLog.at(-1).date, "2026-03-02");
+});
