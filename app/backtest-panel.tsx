@@ -57,6 +57,8 @@ type DailyCandidate = {
   return60: number;
   volatility20: number;
   drawdown60: number;
+  rsi14: number;
+  rsiStatus: "OVERSOLD" | "NEUTRAL" | "OVERBOUGHT";
   aboveMovingAverage20: boolean;
   trendStrength20: number;
   scoreBreakdown: {
@@ -64,6 +66,7 @@ type DailyCandidate = {
     momentum20: number;
     riskAdjustedMomentum: number;
     trend: number;
+    rsi: number;
     drawdownPenalty: number;
     volatilityPenalty: number;
   };
@@ -418,6 +421,12 @@ const cadenceLabel = {
   quarterly: "분기",
 };
 
+const rsiStatusLabel = {
+  OVERSOLD: "과매도",
+  NEUTRAL: "중립",
+  OVERBOUGHT: "과매수",
+} as const;
+
 const guidanceStatusLabel: Record<GuidanceStatus, string> = {
   CHECKED: "확인",
   REVIEW: "검토",
@@ -769,7 +778,9 @@ export function BacktestPanel({
                           <strong>{candidate.name}</strong>
                           <span>
                             {candidate.ticker}
-                            {candidate.current ? " · 현재 편입" : " · 대안 후보"}
+                            {candidate.current ? " · 현재 편입" : " · 대안 후보"} · RSI{" "}
+                            {number.format(candidate.rsi14)}{" "}
+                            ({rsiStatusLabel[candidate.rsiStatus]})
                           </span>
                         </p>
                         <dl>
@@ -788,7 +799,7 @@ export function BacktestPanel({
                           <div>
                             <dt>점수</dt>
                             <dd
-                              title="60·20일 모멘텀, 위험조정 수익률, 추세 강도, 낙폭·변동성을 합산한 점수"
+                              title="60·20일 모멘텀, 위험조정 수익률, 추세 강도, RSI(14), 낙폭·변동성을 합산한 점수"
                             >
                               {percent.format(candidate.score)}
                             </dd>

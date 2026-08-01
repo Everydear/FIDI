@@ -104,5 +104,8 @@ test("signal score exposes bounded momentum, trend, and risk components", () => 
   assert.ok(result.scoreBreakdown.momentum60 > 0);
   assert.ok(result.scoreBreakdown.riskAdjustedMomentum > 0);
   assert.ok(result.scoreBreakdown.trend > 0);
+  assert.ok(result.rsi14 >= 70);
+  assert.equal(result.rsiStatus, "OVERBOUGHT");
+  assert.ok(result.scoreBreakdown.rsi > 0);
   assert.equal(result.scoreBreakdown.drawdownPenalty, 0);
 });
