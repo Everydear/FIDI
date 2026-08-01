@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { runBacktest } from "../lib/backtest/engine.mjs";
+import { createPointInTimeSelector } from "../lib/backtest/point-in-time.mjs";
+
+function dailyPoints(buildValue, count = 75) {
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(Date.UTC(2025, 0, 1 + index))
+      .toISOString()
+      .slice(0, 10);
+    return { date, value: buildValue(index) };
+  });
+}
 
 test("compounds adjusted prices without look-ahead", () => {
   const result = runBacktest({
@@ -143,4 +153,30 @@ test("separates slippage and skips tiny scheduled rebalances", () => {
   assert.equal(result.metrics.cumulativeSlippageCost, 0);
   assert.equal(result.metrics.executionCostBps, 150);
   assert.equal(result.dataQuality.totalMissingObservations, 0);
+});
+
+test("point-in-time selector never uses prices after the decision date", () => {
+  const candidates = [
+    {
+      ticker: "STABLE",
+      name: "Stable candidate",
+      prices: dailyPoints((index) => 100 + index * 0.2),
+    },
+    {
+      ticker: "SPIKE",
+      name: "Later spike candidate",
+      prices: dailyPoints((index) => (index < 65 ? 100 + index * 0.05 : 300)),
+    },
+  ];
+  const selector = createPointInTimeSelector({
+    fixedWeights: { CASH: 0.5 },
+    groups: [{ id: "stocks", candidates }],
+    groupWeights: { stocks: 0.5 },
+  });
+  const assets = ["CASH", "STABLE", "SPIKE"].map((id) => ({ id }));
+  const beforeSpike = selector("2025-03-02", { assets });
+  const afterSpike = selector("2025-03-15", { assets });
+
+  assert.equal(beforeSpike.selected[0].ticker, "STABLE");
+  assert.equal(afterSpike.selected[0].ticker, "SPIKE");
 });

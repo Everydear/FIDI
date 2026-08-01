@@ -27,6 +27,10 @@ import {
 } from "@/lib/backtest/providers";
 import { buildDailyGuide } from "@/lib/backtest/daily-guide.mjs";
 import {
+  createPointInTimeSelector,
+  selectionWarmupDate,
+} from "@/lib/backtest/point-in-time.mjs";
+import {
   buildValidationGuide,
   calculateWalkForwardStatistics,
 } from "@/lib/backtest/validation.mjs";
@@ -127,10 +131,34 @@ function alternateCadence(cadence: RebalanceCadence): RebalanceCadence {
   return "monthly";
 }
 
-function publicResult<T extends { fullCurve: unknown }>(result: T) {
-  const { fullCurve: _fullCurve, ...value } = result;
+function publicResult<T extends { fullCurve: unknown; selectionLog?: unknown }>(
+  result: T,
+) {
+  const {
+    fullCurve: _fullCurve,
+    selectionLog: _selectionLog,
+    ...value
+  } = result;
   void _fullCurve;
+  void _selectionLog;
   return value;
+}
+
+function selectionSwitchCount(
+  selectionLog: Array<{
+    selected: Array<{ groupId: string; ticker: string }>;
+  }>,
+) {
+  const previous = new Map<string, string>();
+  let switches = 0;
+  for (const event of selectionLog) {
+    for (const selected of event.selected) {
+      const prior = previous.get(selected.groupId);
+      if (prior && prior !== selected.ticker) switches += 1;
+      previous.set(selected.groupId, selected.ticker);
+    }
+  }
+  return switches;
 }
 
 function uniqueAssets(assets: BacktestAsset[]) {
@@ -245,6 +273,20 @@ export async function GET(request: Request) {
       };
     });
 
+    const pricedCandidateGroups = candidateGroups.map((group) => ({
+      id: group.id,
+      candidates: group.candidates.map((candidate) => {
+        const priced = pricedByTicker.get(candidate.asset.id);
+        if (!priced) {
+          throw new Error(`${candidate.asset.id} 후보 가격을 찾을 수 없습니다.`);
+        }
+        return {
+          ticker: candidate.asset.id,
+          name: candidate.asset.name,
+          prices: priced.prices,
+        };
+      }),
+    }));
     const seriesByTicker = new Map(
       pricedUniverse.map((asset) => [asset.id, asset.prices]),
     );
@@ -266,6 +308,53 @@ export async function GET(request: Request) {
     const slippageBps = profileValue === "CONTEST" ? 10 : 5;
     const taxBps = 0;
     const executionCostBps = transactionCostBps + slippageBps + taxBps;
+
+    const profileWeights = getProfileWeights(profileValue);
+    const fixedWeights = Object.fromEntries(
+      pricedAssets
+        .filter((asset) => !["strategy", "stocks"].includes(asset.sleeve))
+        .map((asset) => [asset.id, asset.weight]),
+    );
+    const stockGroupCount = pricedCandidateGroups.filter(
+      (group) => group.id !== "strategy-etf",
+    ).length;
+    const groupWeights = Object.fromEntries(
+      pricedCandidateGroups.map((group) => [
+        group.id,
+        group.id === "strategy-etf"
+          ? profileWeights.strategy / 100
+          : profileWeights.stocks / 100 / Math.max(1, stockGroupCount),
+      ]),
+    );
+    const pointInTimeWarmupDate = selectionWarmupDate(pricedCandidateGroups);
+    const pointInTimeStart =
+      pointInTimeWarmupDate > start ? pointInTimeWarmupDate : start;
+    const pointInTimeSelector = createPointInTimeSelector({
+      fixedWeights,
+      groups: pricedCandidateGroups,
+      groupWeights,
+    });
+    const pointInTimeUniverse = pricedUniverse.map((asset) => ({
+      ...asset,
+      weight: fixedWeights[asset.id] ?? 0,
+    }));
+    const runPointInTimeBacktest = ({
+      startDate = pointInTimeStart,
+      cadence: runCadence = cadence,
+      transactionCostBps: runTransactionCostBps = transactionCostBps,
+      slippageBps: runSlippageBps = slippageBps,
+      taxBps: runTaxBps = taxBps,
+    } = {}) =>
+      runBacktest({
+        assets: pricesFrom(pointInTimeUniverse, startDate),
+        cadence: runCadence,
+        transactionCostBps: runTransactionCostBps,
+        slippageBps: runSlippageBps,
+        taxBps: runTaxBps,
+        rebalanceBand: riskRules.rebalanceBand,
+        annualRiskFreeRate,
+        targetWeightsByDate: pointInTimeSelector,
+      });
     const dailyGuide = buildDailyGuide({
       profile: profileValue,
       transactionCostBps,
@@ -289,8 +378,8 @@ export async function GET(request: Request) {
         }),
       })),
     });
-    const result = runBacktest({
-      assets: pricedAssets,
+    const fixedHoldingsResult = runBacktest({
+      assets: pricesFrom(pricedAssets, pointInTimeStart),
       cadence,
       transactionCostBps,
       slippageBps,
@@ -298,8 +387,29 @@ export async function GET(request: Request) {
       rebalanceBand: riskRules.rebalanceBand,
       annualRiskFreeRate,
     });
+    const result = runPointInTimeBacktest();
+    const pointInTimeSelection = {
+      mode: "point-in-time-selection" as const,
+      cadence,
+      warmupObservations: 60,
+      warmupDate: pointInTimeWarmupDate,
+      start: result.period.start,
+      groups: pricedCandidateGroups.length,
+      decisionCount: result.selectionLog.length,
+      switchCount: selectionSwitchCount(result.selectionLog),
+      noLookAhead: true,
+    };
+    const selectionComparison = {
+      dynamicCagr: result.metrics.cagr,
+      fixedHoldingsCagr: fixedHoldingsResult.metrics.cagr,
+      cagrDifference: result.metrics.cagr - fixedHoldingsResult.metrics.cagr,
+      dynamicEndingValue: result.metrics.endingValue,
+      fixedHoldingsEndingValue: fixedHoldingsResult.metrics.endingValue,
+    };
 
-    const policyBenchmarkAssets = createPolicyBenchmarkAssets(pricedAssets);
+    const policyBenchmarkAssets = createPolicyBenchmarkAssets(
+      pricesFrom(pricedAssets, pointInTimeStart),
+    );
     const benchmark = runBacktest({
       assets: policyBenchmarkAssets,
       cadence,
@@ -333,14 +443,10 @@ export async function GET(request: Request) {
       annualRiskFreeRate,
     });
 
-    const costStress = runBacktest({
-      assets: pricedAssets,
-      cadence,
+    const costStress = runPointInTimeBacktest({
       transactionCostBps: transactionCostBps * 3,
       slippageBps: slippageBps * 3,
       taxBps: taxBps * 3,
-      rebalanceBand: riskRules.rebalanceBand,
-      annualRiskFreeRate,
     });
     const costStressPolicyBenchmark = runBacktest({
       assets: policyBenchmarkAssets,
@@ -353,18 +459,11 @@ export async function GET(request: Request) {
     });
     const delayedStartDate =
       result.fullCurve[Math.min(21, result.fullCurve.length - 2)].date;
-    const delayedAssets = pricesFrom(pricedAssets, delayedStartDate);
-    const delayedResult = runBacktest({
-      assets: delayedAssets,
-      cadence,
-      transactionCostBps,
-      slippageBps,
-      taxBps,
-      rebalanceBand: riskRules.rebalanceBand,
-      annualRiskFreeRate,
+    const delayedResult = runPointInTimeBacktest({
+      startDate: delayedStartDate,
     });
     const delayedPolicyBenchmark = runBacktest({
-      assets: createPolicyBenchmarkAssets(delayedAssets),
+      assets: createPolicyBenchmarkAssets(pricesFrom(pricedAssets, delayedStartDate)),
       cadence,
       transactionCostBps,
       slippageBps,
@@ -373,14 +472,8 @@ export async function GET(request: Request) {
       annualRiskFreeRate,
     });
     const sensitivityCadence = alternateCadence(cadence);
-    const cadenceSensitivity = runBacktest({
-      assets: pricedAssets,
+    const cadenceSensitivity = runPointInTimeBacktest({
       cadence: sensitivityCadence,
-      transactionCostBps,
-      slippageBps,
-      taxBps,
-      rebalanceBand: riskRules.rebalanceBand,
-      annualRiskFreeRate,
     });
     const cadencePolicyBenchmark = runBacktest({
       assets: policyBenchmarkAssets,
@@ -469,6 +562,8 @@ export async function GET(request: Request) {
             `KRX 공식 대조는 완료되지 않았습니다: ${krxAudit.error ?? "확인 가능한 응답이 없습니다."} 가격 이력은 계속 표시하지만 공식 대조 상태를 확인한 뒤 해석하세요.`,
           ]),
       `환율 출처: ${fxSourceLabel}. ${fxResult.notes.length > 0 ? fxResult.notes[0] : "일별 원/달러 환율로 원화 환산했습니다."}`,
+      `시점별 후보 선정은 각 리밸런싱 날짜까지 공개된 20일·60일 가격 신호만 사용하고, 다음 구간의 수익률로 검증합니다. ${pointInTimeWarmupDate} 이전 구간은 61개 관측치 워밍업으로 제외했습니다.`,
+      `후보 선정 결정 ${pointInTimeSelection.decisionCount}회, 후보 교체 신호 ${pointInTimeSelection.switchCount}회가 기록됐습니다.`,
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
       `백테스트에는 거래수수료 ${transactionCostBps}bp + 예상 슬리피지 ${slippageBps}bp를 합친 실행비용 ${executionCostBps}bp를 반영했습니다. 실제 체결비용은 시장·주문규모에 따라 달라질 수 있습니다.`,
@@ -491,7 +586,9 @@ export async function GET(request: Request) {
       generatedAt: new Date().toISOString(),
       profile: profileValue,
       baseCurrency: "KRW",
-      validationScope: "current-holdings-fixed",
+      validationScope: "point-in-time-selection",
+      pointInTimeSelection,
+      selectionComparison,
       providers: {
         prices: priceSourceLabel,
         usPrices: pricedUniverse

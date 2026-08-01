@@ -81,7 +81,25 @@ type BacktestSuccess = {
   generatedAt: string;
   profile: string;
   baseCurrency: "KRW";
-  validationScope: "current-holdings-fixed";
+  validationScope: "current-holdings-fixed" | "point-in-time-selection";
+  pointInTimeSelection?: {
+    mode: "point-in-time-selection";
+    cadence: "weekly" | "monthly" | "quarterly";
+    warmupObservations: number;
+    warmupDate: string;
+    start: string;
+    groups: number;
+    decisionCount: number;
+    switchCount: number;
+    noLookAhead: boolean;
+  };
+  selectionComparison?: {
+    dynamicCagr: number;
+    fixedHoldingsCagr: number;
+    cagrDifference: number;
+    dynamicEndingValue: number;
+    fixedHoldingsEndingValue: number;
+  };
   providers: {
     prices: string;
     usPrices: string;
@@ -1019,6 +1037,22 @@ export function BacktestPanel({
                   <dt>가격 데이터</dt>
                   <dd>{state.data.providers.prices}</dd>
                 </div>
+                <div>
+                  <dt>검증 범위</dt>
+                  <dd>
+                    {state.data.pointInTimeSelection?.noLookAhead
+                      ? "시점별 후보 선정"
+                      : "고정 편입종목"}
+                  </dd>
+                </div>
+                {state.data.pointInTimeSelection && (
+                  <div>
+                    <dt>선정 기록</dt>
+                    <dd>
+                      결정 {state.data.pointInTimeSelection.decisionCount}회 · 교체 신호 {state.data.pointInTimeSelection.switchCount}회
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>KRX 확인일</dt>
                   <dd>
