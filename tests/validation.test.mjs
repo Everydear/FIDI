@@ -58,6 +58,10 @@ test("scores a temporal holdout without looking into the test window", () => {
   assert.ok(result.folds.length >= 2);
   assert.equal(result.folds[0].trainObservations, 252);
   assert.ok(result.meanExcessCagr > 0);
+  assert.equal(result.validationMethod, "expanding-window-temporal-holdout-v2");
+  assert.ok(result.confidenceInterval95.lower > 0);
+  assert.ok(result.regimeBreakdown.some((regime) => regime.regime === "UP"));
+  assert.equal(result.worstFold.regime, "UP");
 });
 
 test("turns validation evidence into a neutral operating guide", () => {

@@ -490,7 +490,8 @@ export async function GET(request: Request) {
       {
         minimumTrainObservations: 252,
         testWindow: 63,
-        maxFolds: 3,
+        stepWindow: 63,
+        maxFolds: 6,
       },
     );
     const equityWeight = pricedAssets
@@ -568,7 +569,7 @@ export async function GET(request: Request) {
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",
       `백테스트에는 거래수수료 ${transactionCostBps}bp + 예상 슬리피지 ${slippageBps}bp를 합친 실행비용 ${executionCostBps}bp를 반영했습니다. 실제 체결비용은 시장·주문규모에 따라 달라질 수 있습니다.`,
       `리밸런싱은 ${riskRules.rebalanceBand * 100}%p 이상 목표 비중에서 벗어났을 때만 검토하도록 설정했습니다.`,
-      "OOS 판정은 최소 252개 관측치를 기준 구간으로 두고 이후 63개 관측치씩 최대 3개 검증 구간을 순서대로 평가합니다.",
+      "OOS 판정은 최소 252개 관측치를 기준 구간으로 두고 이후 63개 관측치씩 최대 6개 검증 구간을 순서대로 평가합니다. 각 구간은 상승·하락·횡보 국면과 95% 불확실성 범위를 함께 계산합니다.",
     ];
     if (requestedStart < minimumStart) {
       warnings.push(

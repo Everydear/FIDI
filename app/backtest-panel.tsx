@@ -240,10 +240,33 @@ type BacktestSuccess = {
       walkForward?: {
         status: string;
         alignedObservations: number;
+        minimumTrainObservations?: number;
+        testWindow?: number;
+        stepWindow?: number;
         folds: Array<unknown>;
         beatRate: number | null;
         meanExcessCagr: number | null;
         worstExcessCagr: number | null;
+        confidenceInterval95?: {
+          level: number;
+          lower: number;
+          upper: number;
+          standardError: number;
+        } | null;
+        regimeBreakdown?: Array<{
+          regime: "UP" | "DOWN" | "SIDEWAYS";
+          label: string;
+          folds: number;
+          beatRate: number;
+          meanExcessCagr: number;
+          worstExcessCagr: number;
+        }>;
+        worstFold?: {
+          testStart: string;
+          testEnd: string;
+          excessCagr: number;
+          regime: "UP" | "DOWN" | "SIDEWAYS";
+        } | null;
       };
       dataQuality?: {
         commonObservations: number;
@@ -285,10 +308,33 @@ type BacktestSuccess = {
       walkForward?: {
         status: string;
         alignedObservations: number;
+        minimumTrainObservations?: number;
+        testWindow?: number;
+        stepWindow?: number;
         folds: Array<unknown>;
         beatRate: number | null;
         meanExcessCagr: number | null;
         worstExcessCagr: number | null;
+        confidenceInterval95?: {
+          level: number;
+          lower: number;
+          upper: number;
+          standardError: number;
+        } | null;
+        regimeBreakdown?: Array<{
+          regime: "UP" | "DOWN" | "SIDEWAYS";
+          label: string;
+          folds: number;
+          beatRate: number;
+          meanExcessCagr: number;
+          worstExcessCagr: number;
+        }>;
+        worstFold?: {
+          testStart: string;
+          testEnd: string;
+          excessCagr: number;
+          regime: "UP" | "DOWN" | "SIDEWAYS";
+        } | null;
       };
     };
     checks: GuidanceCheck[];
@@ -910,12 +956,39 @@ export function BacktestPanel({
                 기록 확인 {state.data.guidance.evidence.earliestFormalReview}
               </span>
               {state.data.guidance.evidence.walkForward && (
-                <span>
-                  과거 시계열 홀드아웃 {state.data.guidance.evidence.walkForward.folds.length}개 ·
-                  {state.data.guidance.evidence.walkForward.meanExcessCagr == null
-                    ? " 데이터 부족"
-                    : ` 평균 초과 연수익률 ${percent.format(state.data.guidance.evidence.walkForward.meanExcessCagr)}`}
-                </span>
+                <>
+                  <span>
+                    과거 시계열 홀드아웃 {state.data.guidance.evidence.walkForward.folds.length}개 ·
+                    {state.data.guidance.evidence.walkForward.meanExcessCagr == null
+                      ? " 데이터 부족"
+                      : ` 평균 초과 연수익률 ${percent.format(state.data.guidance.evidence.walkForward.meanExcessCagr)}`}
+                  </span>
+                  {state.data.guidance.evidence.walkForward.confidenceInterval95 && (
+                    <span>
+                      95% 범위{" "}
+                      {percent.format(state.data.guidance.evidence.walkForward.confidenceInterval95.lower)}
+                      {" ~ "}
+                      {percent.format(state.data.guidance.evidence.walkForward.confidenceInterval95.upper)}
+                    </span>
+                  )}
+                  {state.data.guidance.evidence.walkForward.regimeBreakdown &&
+                    state.data.guidance.evidence.walkForward.regimeBreakdown.length > 0 && (
+                      <span>
+                        국면별 상회{" "}
+                        {state.data.guidance.evidence.walkForward.regimeBreakdown
+                          .map((regime) => `${regime.label} ${percent.format(regime.beatRate)}`)
+                          .join(" · ")}
+                      </span>
+                    )}
+                  {state.data.guidance.evidence.walkForward.worstFold && (
+                    <span>
+                      최악 검증 구간{" "}
+                      {state.data.guidance.evidence.walkForward.worstFold.testStart} ~{" "}
+                      {state.data.guidance.evidence.walkForward.worstFold.testEnd} ·{" "}
+                      {percent.format(state.data.guidance.evidence.walkForward.worstFold.excessCagr)}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </section>
