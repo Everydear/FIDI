@@ -58,6 +58,15 @@ type DailyCandidate = {
   volatility20: number;
   drawdown60: number;
   aboveMovingAverage20: boolean;
+  trendStrength20: number;
+  scoreBreakdown: {
+    momentum60: number;
+    momentum20: number;
+    riskAdjustedMomentum: number;
+    trend: number;
+    drawdownPenalty: number;
+    volatilityPenalty: number;
+  };
   score: number;
   rank: number;
 };
@@ -199,6 +208,7 @@ type BacktestSuccess = {
     profile: string;
     evaluationCadence: "daily";
     switchThreshold: number;
+    scoreMethod?: string;
     transactionCostBps: number;
     slippageBps?: number;
     taxBps?: number;
@@ -655,6 +665,9 @@ export function BacktestPanel({
                   실행비용 {state.data.dailyGuide.executionCostBps ?? state.data.dailyGuide.transactionCostBps}bp ·
                   비중 이탈 {percent.format(state.data.dailyGuide.rebalanceBand ?? 0)}p 이상일 때 검토
                 </small>
+                <small>
+                  {state.data.dailyGuide.scoreMethod ?? "신호점수 기준"}
+                </small>
               </div>
               <div className="daily-guide-summary">
                 <div>
@@ -753,8 +766,16 @@ export function BacktestPanel({
                             <dd>{percent.format(candidate.return60)}</dd>
                           </div>
                           <div>
+                            <dt>추세</dt>
+                            <dd>{percent.format(candidate.trendStrength20)}</dd>
+                          </div>
+                          <div>
                             <dt>점수</dt>
-                            <dd>{percent.format(candidate.score)}</dd>
+                            <dd
+                              title="60·20일 모멘텀, 위험조정 수익률, 추세 강도, 낙폭·변동성을 합산한 점수"
+                            >
+                              {percent.format(candidate.score)}
+                            </dd>
                           </div>
                         </dl>
                       </div>

@@ -563,7 +563,7 @@ export async function GET(request: Request) {
             `KRX 공식 대조는 완료되지 않았습니다: ${krxAudit.error ?? "확인 가능한 응답이 없습니다."} 가격 이력은 계속 표시하지만 공식 대조 상태를 확인한 뒤 해석하세요.`,
           ]),
       `환율 출처: ${fxSourceLabel}. ${fxResult.notes.length > 0 ? fxResult.notes[0] : "일별 원/달러 환율로 원화 환산했습니다."}`,
-      `시점별 후보 선정은 각 리밸런싱 날짜까지 공개된 20일·60일 가격 신호만 사용하고, 다음 구간의 수익률로 검증합니다. ${pointInTimeWarmupDate} 이전 구간은 61개 관측치 워밍업으로 제외했습니다.`,
+      `시점별 후보 선정은 각 리밸런싱 날짜까지 공개된 20일·60일 모멘텀과 위험조정·추세 신호만 사용하고, 다음 구간의 수익률로 검증합니다. ${pointInTimeWarmupDate} 이전 구간은 61개 관측치 워밍업으로 제외했습니다.`,
       `후보 선정 결정 ${pointInTimeSelection.decisionCount}회, 후보 교체 신호 ${pointInTimeSelection.switchCount}회가 기록됐습니다.`,
       "모든 종목의 실제 가격이 존재하는 공통 구간만 사용하며 상장 전 수익률을 대체지수로 채우지 않습니다.",
       "일일 가이드는 주문을 실행하지 않습니다. 교체 비교 신호가 나오면 예상 비용·세금·환전·거래 가능 여부를 확인한 뒤 사용자가 직접 결정합니다.",

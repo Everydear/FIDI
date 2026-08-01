@@ -2191,7 +2191,7 @@ footer {
 .candidate-list dl {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, 42px);
+  grid-template-columns: repeat(4, 42px);
   margin: 0;
 }
 
@@ -3750,7 +3750,7 @@ input:focus-visible {
 
   .candidate-list dl {
     grid-column: 2;
-    grid-template-columns: repeat(3, minmax(48px, 1fr));
+    grid-template-columns: repeat(4, minmax(42px, 1fr));
   }
 
   .candidate-list dl > div {

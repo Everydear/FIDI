@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDailyGuide } from "../lib/backtest/daily-guide.mjs";
+import {
+  analyzeSeries,
+  buildDailyGuide,
+} from "../lib/backtest/daily-guide.mjs";
 
 function series(rate, length = 65) {
   const start = Date.UTC(2026, 0, 1);
@@ -92,4 +95,14 @@ test("uses a lower comparison threshold for the contest profile", () => {
 
   assert.equal(guide.switchThreshold, 0.02);
   assert.equal(guide.groups[0].action, "REVIEW_CHANGE");
+});
+
+test("signal score exposes bounded momentum, trend, and risk components", () => {
+  const result = analyzeSeries(series(0.002), "2026-03-06");
+
+  assert.ok(result.score >= -1 && result.score <= 1);
+  assert.ok(result.scoreBreakdown.momentum60 > 0);
+  assert.ok(result.scoreBreakdown.riskAdjustedMomentum > 0);
+  assert.ok(result.scoreBreakdown.trend > 0);
+  assert.equal(result.scoreBreakdown.drawdownPenalty, 0);
 });
